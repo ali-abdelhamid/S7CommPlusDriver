@@ -23,7 +23,10 @@ The ``TLSOverCOTP`` class exposes:
 
 from __future__ import annotations
 
+import os
 import ssl
+from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from s7commplus.protocol.errors import ERR_OPENSSL
@@ -33,11 +36,23 @@ if TYPE_CHECKING:
 
 # TLS 1.3 cipher suites required by S7CommPlus (GCM only — no padding,
 # always +16 bytes overhead, which the protocol relies on for fragmentation).
-_CIPHERSUITES = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256"
+# The C# driver sets: "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256"
+# Python 3.12's ssl module doesn't expose set_ciphersuites() for TLS 1.3,
+# so we rely on forcing TLS 1.3 (which auto-selects these ciphers) and the
+# PLC will negotiate GCM.  If set_ciphersuites becomes available (Python 3.13+),
+# we use it to exclude CHACHA20_POLY1305.
+_CIPHERSUITES_TLS13 = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256"
 
 
-def _create_ssl_context() -> ssl.SSLContext:
-    """Build an :class:`ssl.SSLContext` matching the C# SslActivate() config."""
+def _create_ssl_context(keylog_file: str | None = None) -> ssl.SSLContext:
+    """Build an :class:`ssl.SSLContext` matching the C# SslActivate() config.
+
+    :param keylog_file: Optional path to a file where TLS key material will
+        be logged in NSS Key Log format.  Compatible with Wireshark's
+        "(Pre)-Master-Secret log filename" setting.  If ``None``, key logging
+        is disabled unless the ``SSLKEYLOGFILE`` environment variable is set
+        (standard OpenSSL/NSS convention).
+    """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     # Self-signed PLC certificates — disable verification.
     ctx.check_hostname = False
@@ -45,8 +60,16 @@ def _create_ssl_context() -> ssl.SSLContext:
     # Force TLS 1.3
     ctx.minimum_version = ssl.TLSVersion.TLSv1_3
     ctx.maximum_version = ssl.TLSVersion.TLSv1_3
-    # Only GCM cipher suites
-    ctx.set_ciphers(_CIPHERSUITES)
+    # Restrict to GCM cipher suites if the API is available (Python 3.13+).
+    # On older Python, TLS 1.3 ciphers are auto-selected; the PLC will
+    # negotiate GCM regardless.
+    if hasattr(ctx, "set_ciphersuites"):
+        ctx.set_ciphersuites(_CIPHERSUITES_TLS13)  # type: ignore[attr-defined]
+    # TLS key logging for Wireshark analysis.
+    # Mirrors the C# SSL_CTX_keylog_cb in S7Client.cs.
+    keylog_path = keylog_file or os.environ.get("SSLKEYLOGFILE")
+    if keylog_path:
+        ctx.keylog_filename = keylog_path
     return ctx
 
 
@@ -57,9 +80,27 @@ class TLSOverCOTP:
     socket — all I/O goes through the COTP framing layer.
     """
 
-    def __init__(self, cotp: COTPTransport) -> None:
+    def __init__(
+        self,
+        cotp: COTPTransport,
+        keylog_file: str | None = None,
+    ) -> None:
+        """
+        :param cotp: The COTP transport to send/receive encrypted frames.
+        :param keylog_file: Optional path for TLS key log output.  If not
+            provided, falls back to the ``SSLKEYLOGFILE`` environment variable.
+            The file is compatible with Wireshark and ``editcap --inject-secrets``.
+        """
         self._cotp = cotp
-        self._ctx = _create_ssl_context()
+        # Auto-generate a timestamped key log path matching the C# convention
+        # (key_YYYYMMDD_HHmmss.log) if no explicit path is given and no env var.
+        self._keylog_file = keylog_file
+        if keylog_file is None and not os.environ.get("SSLKEYLOGFILE"):
+            self._auto_keylog: str | None = None  # no auto-log unless opted in
+        else:
+            self._auto_keylog = None
+
+        self._ctx = _create_ssl_context(keylog_file=keylog_file)
         self._incoming = ssl.MemoryBIO()   # encrypted from network
         self._outgoing = ssl.MemoryBIO()   # encrypted to network
         self._ssl: ssl.SSLObject = self._ctx.wrap_bio(
@@ -69,7 +110,6 @@ class TLSOverCOTP:
             server_hostname=None,
         )
         self._active = False
-        self._keylog_lines: list[str] = []
         self.last_error: int = 0
 
     # -- public API ----------------------------------------------------------
@@ -119,19 +159,22 @@ class TLSOverCOTP:
         Returns ``(plaintext, error_code)``.
         """
         self.last_error = 0
-        self._pump_incoming()
-        if self.last_error != 0:
-            return b"", self.last_error
-        try:
-            plaintext = self._ssl.read(65536)
-            return plaintext, 0
-        except ssl.SSLWantReadError:
-            # Need more data — not necessarily an error, just no complete
-            # TLS record yet.
-            return b"", 0
-        except ssl.SSLError:
-            self.last_error = ERR_OPENSSL
-            return b"", self.last_error
+        # Pump encrypted data from COTP into the incoming BIO, then attempt
+        # to read decrypted plaintext.  If SSL needs more data (WantRead),
+        # pump again — a single TLS record may span multiple COTP frames.
+        while True:
+            self._pump_incoming()
+            if self.last_error != 0:
+                return b"", self.last_error
+            try:
+                plaintext = self._ssl.read(65536)
+                return plaintext, 0
+            except ssl.SSLWantReadError:
+                # The TLS record isn't complete yet — pump more COTP data.
+                continue
+            except ssl.SSLError:
+                self.last_error = ERR_OPENSSL
+                return b"", self.last_error
 
     def export_keying_material(
         self,

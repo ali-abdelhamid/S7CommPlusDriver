@@ -156,15 +156,18 @@ class S7Client:
         self._time_ms = int((time.monotonic() - start) * 1000)
         return 0
 
-    def ssl_activate(self) -> int:
+    def ssl_activate(self, keylog_file: str | None = None) -> int:
         """Activate TLS 1.3 over the existing COTP connection.
 
         Must be called after :meth:`connect` succeeds.  Returns 0 on success.
+
+        :param keylog_file: Optional path for TLS key log (Wireshark-compatible).
+            If not given, falls back to ``SSLKEYLOGFILE`` env var.
         """
         if self._cotp is None:
             return ERR_TCP_NOT_CONNECTED
         try:
-            self._tls = TLSOverCOTP(self._cotp)
+            self._tls = TLSOverCOTP(self._cotp, keylog_file=keylog_file)
             err = self._tls.handshake()
             if err != 0:
                 self._tls = None
