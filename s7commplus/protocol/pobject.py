@@ -85,6 +85,17 @@ class PObject:
 class OffsetInfo:
     """Generic offset info parsed from a vartype list element."""
 
+    # Offset info type constants
+    FB_ARRAY = 0
+    STRUCT_ELEM_STD = 1; STD = 8
+    STRUCT_ELEM_STRING = 2; STRING = 9
+    STRUCT_ELEM_ARRAY_1DIM = 3; ARRAY_1DIM = 10
+    STRUCT_ELEM_ARRAY_MDIM = 4; ARRAY_MDIM = 11
+    STRUCT_ELEM_STRUCT = 5; STRUCT = 12
+    STRUCT_ELEM_STRUCT_1DIM = 6; STRUCT_1DIM = 13
+    STRUCT_ELEM_STRUCT_MDIM = 7; STRUCT_MDIM = 14
+    FB_SFB = 15
+
     def __init__(self) -> None:
         self.offset_type: int = 0
         self.optimized_address: int = 0
@@ -96,9 +107,33 @@ class OffsetInfo:
         self.mdim_element_counts: list[int] = []
         self.extra: dict[str, int] = {}
 
+    def has_relation(self) -> bool:
+        return self.offset_type in (0, 5, 6, 7, 12, 13, 14, 15)
+
+    def is_1dim(self) -> bool:
+        return self.offset_type in (3, 6, 10, 13)
+
+    def is_mdim(self) -> bool:
+        return self.offset_type in (4, 7, 11, 14)
+
 
 class VartypeElement:
     """One element in a PVartypeList."""
+
+    # attribute_flags masks
+    ATTR_OFFSETINFOTYPE = 0xF000
+    ATTR_HMI_VISIBLE = 0x0800
+    ATTR_HMI_READONLY = 0x0400
+    ATTR_HMI_ACCESSIBLE = 0x0200
+    ATTR_OPTIMIZED_ACCESS = 0x0080
+    ATTR_SECTION = 0x0070
+    ATTR_BITOFFSET = 0x0007
+
+    # bitoffsetinfo_flags masks
+    BITINFO_RETAIN = 0x80
+    BITINFO_NONOPT_BITOFFSET = 0x70
+    BITINFO_CLASSIC = 0x08
+    BITINFO_OPT_BITOFFSET = 0x07
 
     def __init__(self) -> None:
         self.lid: int = 0
@@ -107,6 +142,21 @@ class VartypeElement:
         self.attribute_flags: int = 0
         self.bitoffsetinfo_flags: int = 0
         self.offset_info: OffsetInfo | None = None
+
+    def get_attribute_bitoffset(self) -> int:
+        return self.attribute_flags & self.ATTR_BITOFFSET
+
+    def get_attribute_section(self) -> int:
+        return (self.attribute_flags & self.ATTR_SECTION) >> 4
+
+    def get_bitoffsetinfo_flag_classic(self) -> bool:
+        return (self.bitoffsetinfo_flags & self.BITINFO_CLASSIC) != 0
+
+    def get_bitoffsetinfo_nonoptimized_bitoffset(self) -> int:
+        return (self.bitoffsetinfo_flags & self.BITINFO_NONOPT_BITOFFSET) >> 4
+
+    def get_bitoffsetinfo_optimized_bitoffset(self) -> int:
+        return self.bitoffsetinfo_flags & self.BITINFO_OPT_BITOFFSET
 
 
 def _deserialize_offset_info(data: bytes, offset: int, oi_type: int) -> tuple[OffsetInfo, int]:
@@ -137,6 +187,7 @@ def _deserialize_offset_info(data: bytes, offset: int, oi_type: int) -> tuple[Of
         # Array1Dim
         v1, n = s7p.decode_uint16_le(data, offset); offset += n
         v2, n = s7p.decode_uint16_le(data, offset); offset += n
+        oi.extra["unspecified_offsetinfo1"] = v1  # used for String/WString array element size
         oi.optimized_address, n = s7p.decode_uint32_le(data, offset); offset += n
         oi.nonoptimized_address, n = s7p.decode_uint32_le(data, offset); offset += n
         oi.array_lower_bounds, n = s7p.decode_int32_le(data, offset); offset += n
@@ -145,6 +196,7 @@ def _deserialize_offset_info(data: bytes, offset: int, oi_type: int) -> tuple[Of
         # ArrayMDim
         v1, n = s7p.decode_uint16_le(data, offset); offset += n
         v2, n = s7p.decode_uint16_le(data, offset); offset += n
+        oi.extra["unspecified_offsetinfo1"] = v1  # used for String/WString array element size
         oi.optimized_address, n = s7p.decode_uint32_le(data, offset); offset += n
         oi.nonoptimized_address, n = s7p.decode_uint32_le(data, offset); offset += n
         oi.array_lower_bounds, n = s7p.decode_int32_le(data, offset); offset += n
