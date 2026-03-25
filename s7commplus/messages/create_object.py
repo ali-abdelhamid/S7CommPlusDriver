@@ -14,6 +14,7 @@ from s7commplus.messages.base import (
 
 class CreateObjectRequest:
     transport_flags = 0x36
+    function_code = FunctionCode.CREATE_OBJECT
 
     def __init__(self, protocol_version: int, seq_num: int,
                  with_integrity_id: bool = False) -> None:

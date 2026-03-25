@@ -13,6 +13,7 @@ from s7commplus.messages.base import (
 
 class InitSslRequest:
     transport_flags = 0x30
+    function_code = FunctionCode.INIT_SSL
 
     def __init__(self, protocol_version: int, seq_num: int, session_id: int) -> None:
         self.protocol_version = protocol_version
