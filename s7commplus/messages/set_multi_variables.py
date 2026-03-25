@@ -14,6 +14,7 @@ from s7commplus.messages.base import (
 
 class SetMultiVariablesRequest:
     transport_flags = 0x34
+    function_code = FunctionCode.SET_MULTI_VARIABLES
 
     def __init__(self, protocol_version: int) -> None:
         self.protocol_version = protocol_version

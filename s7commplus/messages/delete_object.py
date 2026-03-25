@@ -13,6 +13,7 @@ from s7commplus.messages.base import (
 
 class DeleteObjectRequest:
     transport_flags = 0x34
+    function_code = FunctionCode.DELETE_OBJECT
 
     def __init__(self, protocol_version: int) -> None:
         self.protocol_version = protocol_version
