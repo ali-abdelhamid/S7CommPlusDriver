@@ -12,10 +12,18 @@ from s7commplus.messages.base import (
 
 
 class DeleteObjectRequest:
+    """Request to delete (disconnect) a server session object."""
+
     transport_flags = 0x34
     function_code = FunctionCode.DELETE_OBJECT
 
     def __init__(self, protocol_version: int) -> None:
+
+        """Initialize a DeleteObjectRequest.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.session_id: int = 0
@@ -24,6 +32,15 @@ class DeleteObjectRequest:
         self.delete_object_id: int = 0
 
     def serialize(self, buf: bytearray) -> int:
+
+        """Serialize this request into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = encode_request_header(
             buf, FunctionCode.DELETE_OBJECT,
             self.sequence_number, self.session_id, self.transport_flags,
@@ -38,8 +55,17 @@ class DeleteObjectRequest:
 
 
 class DeleteObjectResponse:
+    """Response confirming session object deletion."""
+
     def __init__(self, protocol_version: int = 0,
                  with_integrity_id: bool = True) -> None:
+
+        """Initialize a DeleteObjectResponse.
+
+        Args:
+            protocol_version: Wire protocol version.
+            with_integrity_id: Whether integrity ID is present.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.transport_flags: int = 0
@@ -50,6 +76,16 @@ class DeleteObjectResponse:
         self.error_object = None
 
     def deserialize(self, data: bytes, offset: int) -> int:
+
+        """Deserialize this response from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Number of bytes consumed.
+        """
         start = offset
         self.sequence_number, self.transport_flags, offset = \
             decode_response_common(data, offset)
@@ -65,6 +101,17 @@ class DeleteObjectResponse:
     @classmethod
     def from_pdu(cls, data: bytes, offset: int = 0,
                  with_integrity_id: bool = True) -> DeleteObjectResponse | None:
+
+        """Construct a response from a complete PDU.
+
+        Args:
+            data: Raw PDU bytes.
+            offset: Starting offset.
+            with_integrity_id: Whether integrity ID is present.
+
+        Returns:
+            Populated response, or ``None`` on parse failure.
+        """
         proto_ver, offset = decode_response_pdu_header(
             data, offset, Opcode.RESPONSE, FunctionCode.DELETE_OBJECT,
         )

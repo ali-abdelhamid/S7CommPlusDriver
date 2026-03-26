@@ -19,6 +19,7 @@ class CommResources:
     """PLC resource limits read via ObjectRoot/SystemLimits."""
 
     def __init__(self) -> None:
+        """Initialize CommResources with conservative defaults."""
         self.tags_per_read_max: int = 20
         self.tags_per_write_max: int = 20
         self.plc_attributes_max: int = 0
@@ -37,6 +38,12 @@ class CommResources:
           LID 0    = PlcSubscriptionsMax
           LID 1    = PlcAttributesMax
           LID 2    = SubscriptionMemoryMax
+
+        Args:
+            conn: Active S7CommPlus connection.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         addresses = []
         for lid in (1000, 1001, 0, 1, 2):
@@ -70,6 +77,12 @@ class CommResources:
           LID 0 = PlcSubscriptionsFree
           LID 1 = PlcAttributesFree
           LID 2 = SubscriptionMemoryFree
+
+        Args:
+            conn: Active S7CommPlus connection.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         addresses = []
         for lid in (0, 1, 2):

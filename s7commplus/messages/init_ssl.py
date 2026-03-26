@@ -12,10 +12,20 @@ from s7commplus.messages.base import (
 
 
 class InitSslRequest:
+    """Request to initiate TLS handshake on the S7CommPlus connection."""
+
     transport_flags = 0x30
     function_code = FunctionCode.INIT_SSL
 
     def __init__(self, protocol_version: int, seq_num: int, session_id: int) -> None:
+
+        """Initialize an InitSslRequest.
+
+        Args:
+            protocol_version: Wire protocol version.
+            seq_num: Sequence number.
+            session_id: Session ID.
+        """
         self.protocol_version = protocol_version
         self.sequence_number = seq_num
         self.session_id = session_id
@@ -23,6 +33,15 @@ class InitSslRequest:
         self.integrity_id: int = 0
 
     def serialize(self, buf: bytearray) -> int:
+
+        """Serialize this request into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = encode_request_header(
             buf, FunctionCode.INIT_SSL,
             self.sequence_number, self.session_id, self.transport_flags,
@@ -32,7 +51,15 @@ class InitSslRequest:
 
 
 class InitSslResponse:
+    """Response acknowledging TLS initiation."""
+
     def __init__(self, protocol_version: int = 0) -> None:
+
+        """Initialize an InitSslResponse.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.transport_flags: int = 0
@@ -42,6 +69,16 @@ class InitSslResponse:
         self.integrity_id: int = 0
 
     def deserialize(self, data: bytes, offset: int) -> int:
+
+        """Deserialize this response from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Number of bytes consumed.
+        """
         start = offset
         self.sequence_number, self.transport_flags, offset = \
             decode_response_common(data, offset)
@@ -53,6 +90,16 @@ class InitSslResponse:
 
     @classmethod
     def from_pdu(cls, data: bytes, offset: int = 0) -> InitSslResponse | None:
+
+        """Construct a response from a complete PDU.
+
+        Args:
+            data: Raw PDU bytes.
+            offset: Starting offset.
+
+        Returns:
+            Populated response, or ``None`` on parse failure.
+        """
         proto_ver, offset = decode_response_pdu_header(
             data, offset, Opcode.RESPONSE, FunctionCode.INIT_SSL,
         )

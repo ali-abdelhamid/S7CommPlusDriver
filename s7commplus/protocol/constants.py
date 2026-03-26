@@ -13,6 +13,7 @@ from enum import IntEnum
 # ---------------------------------------------------------------------------
 
 class ProtocolVersion:
+    """S7CommPlus protocol version identifiers."""
     V1 = 0x01
     V2 = 0x02
     V3 = 0x03
@@ -24,6 +25,7 @@ class ProtocolVersion:
 # ---------------------------------------------------------------------------
 
 class Opcode:
+    """PDU opcode bytes (request, response, notification)."""
     REQUEST = 0x31
     RESPONSE = 0x32
     NOTIFICATION = 0x33
@@ -35,6 +37,7 @@ class Opcode:
 # ---------------------------------------------------------------------------
 
 class FunctionCode:
+    """S7CommPlus function codes identifying request/response types."""
     ERROR = 0x04B1
     EXPLORE = 0x04BB
     CREATE_OBJECT = 0x04CA
@@ -62,6 +65,7 @@ class FunctionCode:
 # ---------------------------------------------------------------------------
 
 class Datatype:
+    """Wire-level datatype IDs used in S7CommPlus serialization."""
     NULL = 0x00
     BOOL = 0x01
     USINT = 0x02
@@ -94,6 +98,7 @@ class Datatype:
 # ---------------------------------------------------------------------------
 
 class ElementID:
+    """Element-ID markers that delimit protocol objects on the wire."""
     START_OF_OBJECT = 0xA1
     TERMINATING_OBJECT = 0xA2
     ATTRIBUTE = 0xA3
@@ -109,6 +114,7 @@ class ElementID:
 # ---------------------------------------------------------------------------
 
 class Ids:
+    """Numeric identifiers for protocol objects, attributes, and addresses."""
     NONE = 0
 
     # Native objects
@@ -279,6 +285,8 @@ class Ids:
 # ---------------------------------------------------------------------------
 
 class Softdatatype(IntEnum):
+    """Software datatype IDs used in PLC variable type descriptions."""
+
     VOID = 0
     BOOL = 1
     BYTE = 2

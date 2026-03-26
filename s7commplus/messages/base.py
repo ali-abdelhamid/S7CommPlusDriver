@@ -24,7 +24,18 @@ def encode_request_header(
     session_id: int,
     transport_flags: int,
 ) -> int:
-    """Encode the common 14-byte request header."""
+    """Encode the common 14-byte request header.
+
+    Args:
+        buf: Target buffer to append to.
+        function_code: S7CommPlus function code.
+        seq_num: Sequence number for this request.
+        session_id: Session ID (uint32).
+        transport_flags: Transport flags byte.
+
+    Returns:
+        Number of bytes written (always 14).
+    """
     ret = 0
     ret += s7p.encode_byte(buf, Opcode.REQUEST)
     ret += s7p.encode_uint16(buf, 0)           # reserved
@@ -44,7 +55,17 @@ def decode_response_pdu_header(
 ) -> tuple[int, int]:
     """Decode and validate a response PDU header.
 
-    Returns ``(protocol_version, new_offset)`` or raises ValueError.
+    Args:
+        data: Source byte buffer.
+        offset: Position to read from.
+        expected_opcode: Expected opcode value.
+        expected_function: Expected function code value.
+
+    Returns:
+        Tuple of ``(protocol_version, new_offset)``.
+
+    Raises:
+        ValueError: If opcode or function code does not match.
     """
     start = offset
     proto_ver, n = s7p.decode_byte(data, offset); offset += n
@@ -66,7 +87,12 @@ def decode_response_pdu_header(
 def decode_response_common(data: bytes, offset: int) -> tuple[int, int, int]:
     """Decode the common response fields after the PDU header.
 
-    Returns ``(sequence_number, transport_flags, new_offset)``.
+    Args:
+        data: Source byte buffer.
+        offset: Position to read from.
+
+    Returns:
+        Tuple of ``(sequence_number, transport_flags, new_offset)``.
     """
     seq_num, n = s7p.decode_uint16(data, offset); offset += n
     transport_flags, n = s7p.decode_byte(data, offset); offset += n

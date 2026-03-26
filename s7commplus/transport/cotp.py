@@ -52,6 +52,14 @@ def _build_iso_cr(
         TPKT header (4 bytes) + COTP CR header (16 bytes) + Remote TSAP.
 
     Total = 20 + len(remote_tsap).
+
+    Args:
+        local_tsap_hi: High byte of the local TSAP.
+        local_tsap_lo: Low byte of the local TSAP.
+        remote_tsap: Destination TSAP bytes.
+
+    Returns:
+        Complete CR telegram as ``bytes``.
     """
     tsap_len = len(remote_tsap)
     total_len = 20 + tsap_len
@@ -88,6 +96,11 @@ class COTPTransport:
     """
 
     def __init__(self, sock: MsgSocket) -> None:
+        """Initialize the COTP framing layer.
+
+        Args:
+            sock: Underlying TCP socket to read/write through.
+        """
         self._sock = sock
         self.last_error: int = 0
         self._last_pdu_type: int = 0
@@ -104,7 +117,14 @@ class COTPTransport:
         """Perform the ISO (COTP) connection handshake.
 
         Sends a Connection Request (CR) and waits for a Connection Confirm (CC).
-        Returns 0 on success, or an error code.
+
+        Args:
+            local_tsap_hi: High byte of the local TSAP.
+            local_tsap_lo: Low byte of the local TSAP.
+            remote_tsap: Destination TSAP bytes.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         cr = _build_iso_cr(local_tsap_hi, local_tsap_lo, remote_tsap)
         self.last_error = self._send_packet(cr)
@@ -128,7 +148,11 @@ class COTPTransport:
     def send_iso_packet(self, payload: bytes | bytearray) -> int:
         """Wrap *payload* in a TPKT+COTP-DT header and send.
 
-        Returns 0 on success, or an error code.
+        Args:
+            payload: Raw payload bytes to frame and send.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         size = len(payload)
         total = size + ISO_HEADER_SIZE
@@ -148,7 +172,9 @@ class COTPTransport:
     def recv_iso_packet(self) -> tuple[bytes, int]:
         """Receive one TPKT/COTP-DT framed packet.
 
-        Returns (payload_bytes, error_code).  On error the payload is empty.
+        Returns:
+            Tuple of ``(payload_bytes, error_code)``.  On error the
+            payload is empty.
         """
         length = self._recv_iso_packet()
         if self.last_error != 0 or length <= ISO_HEADER_SIZE:
@@ -157,11 +183,13 @@ class COTPTransport:
         return bytes(self._pdu[ISO_HEADER_SIZE:ISO_HEADER_SIZE + payload_size]), 0
 
     def _recv_iso_packet(self) -> int:
-        """Internal: receive a full TPKT+COTP frame into ``self._pdu``.
+        """Receive a full TPKT+COTP frame into ``self._pdu``.
 
-        Returns the total TPKT length (including header).  On error returns 0.
         Mirrors RecvIsoPacket() in S7Client.cs — skips keep-alive packets
         (length == 7) automatically.
+
+        Returns:
+            Total TPKT length (``int``) including header; 0 on error.
         """
         done = False
         size = 0
@@ -198,6 +226,14 @@ class COTPTransport:
     # -- helpers -------------------------------------------------------------
 
     def _send_packet(self, data: bytes | bytearray) -> int:
+        """Send a raw packet via the socket (no COTP framing).
+
+        Args:
+            data: Complete packet bytes to send.
+
+        Returns:
+            Error code (``int``): 0 on success.
+        """
         if not self._sock.connected:
             return ERR_TCP_NOT_CONNECTED
         return self._sock.send(data, len(data))

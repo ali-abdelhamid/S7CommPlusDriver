@@ -47,11 +47,15 @@ _CIPHERSUITES_TLS13 = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256"
 def _create_ssl_context(keylog_file: str | None = None) -> ssl.SSLContext:
     """Build an :class:`ssl.SSLContext` matching the C# SslActivate() config.
 
-    :param keylog_file: Optional path to a file where TLS key material will
-        be logged in NSS Key Log format.  Compatible with Wireshark's
-        "(Pre)-Master-Secret log filename" setting.  If ``None``, key logging
-        is disabled unless the ``SSLKEYLOGFILE`` environment variable is set
-        (standard OpenSSL/NSS convention).
+    Args:
+        keylog_file: Optional path to a file where TLS key material will
+            be logged in NSS Key Log format.  Compatible with Wireshark's
+            "(Pre)-Master-Secret log filename" setting.  If ``None``, key
+            logging is disabled unless the ``SSLKEYLOGFILE`` environment
+            variable is set (standard OpenSSL/NSS convention).
+
+    Returns:
+        Configured :class:`ssl.SSLContext` for TLS 1.3 with GCM ciphers.
     """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     # Self-signed PLC certificates — disable verification.
@@ -85,11 +89,14 @@ class TLSOverCOTP:
         cotp: COTPTransport,
         keylog_file: str | None = None,
     ) -> None:
-        """
-        :param cotp: The COTP transport to send/receive encrypted frames.
-        :param keylog_file: Optional path for TLS key log output.  If not
-            provided, falls back to the ``SSLKEYLOGFILE`` environment variable.
-            The file is compatible with Wireshark and ``editcap --inject-secrets``.
+        """Initialize the TLS-over-COTP layer.
+
+        Args:
+            cotp: The COTP transport to send/receive encrypted frames.
+            keylog_file: Optional path for TLS key log output.  If not
+                provided, falls back to the ``SSLKEYLOGFILE`` environment
+                variable.  The file is compatible with Wireshark and
+                ``editcap --inject-secrets``.
         """
         self._cotp = cotp
         # Auto-generate a timestamped key log path matching the C# convention
@@ -117,7 +124,8 @@ class TLSOverCOTP:
     def handshake(self) -> int:
         """Drive the TLS 1.3 handshake over COTP frames.
 
-        Returns 0 on success, ``ERR_OPENSSL`` on failure.
+        Returns:
+            Error code (``int``): 0 on success, ``ERR_OPENSSL`` on failure.
         """
         self.last_error = 0
         try:
@@ -143,7 +151,11 @@ class TLSOverCOTP:
     def send(self, data: bytes | bytearray) -> int:
         """Encrypt *data* and send via COTP.
 
-        Returns 0 on success.
+        Args:
+            data: Plaintext payload to encrypt and send.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         self.last_error = 0
         try:
@@ -156,7 +168,9 @@ class TLSOverCOTP:
     def recv(self) -> tuple[bytes, int]:
         """Receive one COTP frame, decrypt, and return plaintext.
 
-        Returns ``(plaintext, error_code)``.
+        Returns:
+            Tuple of ``(plaintext, error_code)``.  On error the plaintext
+            is empty.
         """
         self.last_error = 0
         # Pump encrypted data from COTP into the incoming BIO, then attempt
@@ -186,8 +200,15 @@ class TLSOverCOTP:
         Mirrors ``SSL_export_keying_material()`` used by
         ``OpenSSLConnector.getOMSExporterSecret()`` in C#.
 
-        Note: ``SSLObject.export_keying_material()`` is available from
-        Python 3.13+.  For earlier versions a fallback is provided.
+        Args:
+            label: TLS exporter label string.
+            length: Number of bytes to export.
+
+        Returns:
+            Derived key material (``bytes``).
+
+        Raises:
+            NotImplementedError: If Python < 3.13 and no fallback available.
         """
         if hasattr(self._ssl, "export_keying_material"):
             return self._ssl.export_keying_material(label, length)  # type: ignore[attr-defined]
@@ -198,16 +219,17 @@ class TLSOverCOTP:
 
     @property
     def active(self) -> bool:
+        """Whether TLS is active (``bool``)."""
         return self._active
 
     def deactivate(self) -> None:
+        """Mark TLS as inactive (cleartext mode resumes)."""
         self._active = False
 
     # -- internal I/O pumps --------------------------------------------------
 
     def _flush_outgoing(self) -> None:
-        """Read all pending encrypted bytes from the outgoing BIO and send
-        them as a COTP ISO packet."""
+        """Read all pending encrypted bytes from the outgoing BIO and send them as a COTP ISO packet."""
         data = self._outgoing.read()
         if data:
             err = self._cotp.send_iso_packet(data)
@@ -215,8 +237,7 @@ class TLSOverCOTP:
                 self.last_error = err
 
     def _pump_incoming(self) -> None:
-        """Receive one COTP ISO packet and feed the encrypted bytes into the
-        incoming BIO for OpenSSL to decrypt."""
+        """Receive one COTP ISO packet and feed the encrypted bytes into the incoming BIO for decryption."""
         payload, err = self._cotp.recv_iso_packet()
         if err != 0:
             self.last_error = err

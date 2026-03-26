@@ -9,24 +9,35 @@ class S7CommPlusError(Exception):
     """Base exception for all S7CommPlus errors."""
 
     def __init__(self, code: int, message: str = ""):
+        """Initialize with an error code and optional message.
+
+        Args:
+            code: Numeric error code from the S7CommPlus error constants.
+            message: Human-readable message. If empty, looked up via
+                :func:`error_text`.
+        """
         self.code = code
         self.message = message or error_text(code)
         super().__init__(self.message)
 
 
 class TCPError(S7CommPlusError):
+    """TCP-level error code constants."""
     pass
 
 
 class ISOError(S7CommPlusError):
+    """ISO/COTP-level error code constants."""
     pass
 
 
 class ClientError(S7CommPlusError):
+    """Client-level error code constants."""
     pass
 
 
 class OpenSSLError(S7CommPlusError):
+    """TLS/OpenSSL error code constants."""
     pass
 
 
@@ -159,12 +170,29 @@ _ERROR_TEXTS: dict[int, str] = {
 
 
 def error_text(code: int) -> str:
-    """Return human-readable text for an error code."""
+    """Return human-readable text for an error code.
+
+    Args:
+        code: Numeric error code.
+
+    Returns:
+        Human-readable error description string.
+    """
     return _ERROR_TEXTS.get(code, f"CLI : Unknown error (0x{code:08x})")
 
 
 def check_error(code: int) -> None:
-    """Raise an appropriate exception if *code* is non-zero."""
+    """Raise an appropriate exception if *code* is non-zero.
+
+    Args:
+        code: Numeric error code. Zero means success.
+
+    Raises:
+        TCPError: For TCP-level errors.
+        ISOError: For ISO/COTP-level errors.
+        OpenSSLError: For TLS/OpenSSL errors.
+        ClientError: For all other non-zero codes.
+    """
     if code == 0:
         return
     msg = error_text(code)
