@@ -1,184 +1,185 @@
-# S7commPlusDriver
+# S7CommPlusDriver
 
-Kommunikationstreiber für den Datenaustausch mit S7-1200/1500 Steuerungen.
+Communication driver for data exchange with S7-1200/1500 PLCs.
 
-## Entwicklungsstand
+## Development Status
 
-Dies ist aktuell ein Entwicklungsstand und nicht für den Produktiveinsatz vorgesehen.
+This is currently a development release and is not intended for production use.
 
-Ziel ist es, einen Kommunikationstreiber zu entwickeln, welcher den Zugriff auf den Variablenhaushalt
-von S7 1200/1500 Steuerungen über den symbolischen Zugriff auf sogenannte "optimierte" Bereiche erlaubt.
+The goal is to develop a communication driver that provides access to the variable space
+of S7-1200/1500 PLCs via symbolic access to so-called "optimized" memory areas.
 
-Diese Implementierung ist vollständig in C# verfasst. Für die TLS-Verschlüsselung wird die OpenSSL-Bibliothek verwendet.
+This implementation is written entirely in C#. The OpenSSL library is used for TLS encryption.
 
-## Systemvorraussetzungen
+## System Requirements
 
 ### CPU
-Der Kommunikationstreiber unterstützt **ausschließlich** CPUs mit einer Firmware welche die sichere Kommunikation
-über das TLS-Protokoll erlaubt. Das wären nach aktuellem Wissensstand
-- S7 1200 mit einer Firmware >= V4.3 (TLS 1.3 ab V4.5)
-- S7 1500 mit einer Firmware >= V2.9
+The communication driver supports **exclusively** CPUs with firmware that enables secure communication
+over the TLS protocol. As of the current state of knowledge, these are:
+- S7-1200 with firmware >= V4.3 (TLS 1.3 from V4.5)
+- S7-1500 with firmware >= V2.9
 
-Wichtig ist dabei, dass nicht nur nur eine CPU mit entsprechender Firmware vorhanden ist, sondern auch in der Entwicklungsumgebung
-mit der ensprechenden Version projektiert wurde. Das ist nur mit einer TIA-Portal Version >= V17 möglich.
+It is important to note that not only must a CPU with the corresponding firmware be present, but the project
+must also have been configured in the development environment with the corresponding version. This is only
+possible with TIA Portal version >= V17.
 
 ### OpenSSL
-Für die TLS-Kommunikation wird OpenSSL verwendet. Ist OpenSSL in der entsprechenden Version installiert, dann sollte ein entsprechender
-Systempfad zum Installationsverzeichnis eingetragen sein. Die notwendigen dlls sind aber auch im Projekt abgelegt, und werden im Buildprozess
-in der notwendigen Version (x86 oder x64) in das Ausgabeverzeichnis kopiert.
-Die notwendigen dlls mit Dateinamen je nach verwendetem Betriebssystem:
+OpenSSL is used for TLS communication. If OpenSSL is installed in the corresponding version, a system path
+to the installation directory should be set. The necessary DLLs are also included in the project and are
+copied to the output directory in the required version (x86 or x64) during the build process.
+The required DLLs with filenames depending on the operating system:
 
-Für 32 Bit (x86):
+For 32-bit (x86):
 - libcrypto-3.dll
 - libssl-3.dll
 
-Für 64 Bit (x64):
+For 64-bit (x64):
 - libcrypto-3-x64.dll
 - libssl-3-x64.dll
 
-## Getestete Kommunikation
-Mit folgenden Geräten wurde bisher erfolgreich getestet:
-- S7 1211 mit Firmware V4.5
-- TIA Plcsim V17 (mit Nettoplcsim)
-- TIA Plcsim V18 (mit Nettoplcsim)
+## Tested Communication
+The following devices have been successfully tested:
+- S7-1211 with firmware V4.5
+- TIA PLCSim V17 (with Nettoplcsim)
+- TIA PLCSim V18 (with Nettoplcsim)
 
-## Analyse mit Wireshark
-Aufgrund der Verschlüsselung können die übertragenen Daten ohne weitere Informationen mit Wireshark nicht mehr eingesehen werden.
-Zur Treiberentwicklung ist im Projekt eine Funktion integriert, welche die ausgehandelten Secrets in eine Textdatei
-(key_YYYYMMDD_hhmmss.log) ausgibt. Mit diesen Informationen ist es Wireshark möglich die Kommunikation zu entschlüsseln und darzustellen.
-Wichtig ist dabei, dass die Aufzeichnung den TLS-Verbindungsaufbau enthalten muss!
+## Analysis with Wireshark
+Due to encryption, the transmitted data can no longer be viewed in Wireshark without additional information.
+For driver development, a function is integrated into the project that outputs the negotiated secrets to a text file
+(key_YYYYMMDD_hhmmss.log). With this information, Wireshark is able to decrypt and display the communication.
+It is important that the capture includes the TLS connection establishment!
 
-Um Wireshark diese Information verfügbar zu machen, existieren zwei Möglichkeiten:
-1. Die Log-Datei in ein Verzeichnis abzulegen und Wireshark dieses bekannt zu machen. Dazu in Wireshark *Menü* → *Einstellungen* aufrufen.
-Unter *Protocols* den Punkt *TLS* anwählen, und im Feld *(Pre)-Master-Secret log filename* die entsprechende Datei auswählen
-2. Die Secrets direkt in die Wireshark-Aufzeichnung integrieren
+There are two ways to make this information available to Wireshark:
+1. Place the log file in a directory and make it known to Wireshark. To do this, open *Menu* -> *Preferences* in Wireshark.
+Under *Protocols*, select *TLS*, and in the *(Pre)-Master-Secret log filename* field, select the corresponding file.
+2. Integrate the secrets directly into the Wireshark capture file.
 
-Zur Weitergabe an andere Personen zur Analyse, ist Punkt 2 zu bevorzugen, da alles notwendige in einer Aufzeichnung vorhanden ist.
-Die Integration geschieht über das Programm "editcap.exe" im Wireshark Installationsverzeichnis. Dazu muss eine Aufzeichnung in
-Wireshark mit der Endung *.pcapng* gespeichert werden.
+For sharing with others for analysis, option 2 is preferred, since everything needed is contained in a single capture file.
+The integration is done via the program "editcap.exe" in the Wireshark installation directory. For this, a capture must be
+saved in Wireshark with the *.pcapng* extension.
 
-Über die Eingabeaufforderung werden mit folgender Anweisung in die Aufzeichnung "test-capture.pcapng" die Secrets aus "key.log"
-integriert, und in der Datei "test-capture-with-keys.pcapng" gespeichert. Wird letztere Datei dann in Wireshark geöffnet, kann die
-Kommunikation dort entschlüsselt, dekodiert und dem Protokoll entsprechend dargestellt werden.
-Die key.log kann bei Bedarf anschließend gelöscht werden.
+Using the command line, the following command integrates the secrets from "key.log" into the capture "test-capture.pcapng"
+and saves the result in the file "test-capture-with-keys.pcapng". When the latter file is opened in Wireshark, the
+communication can be decrypted, decoded, and displayed according to the protocol.
+The key.log file can be deleted afterwards if no longer needed.
 ```
 "C:\Program Files\Wireshark\editcap.exe" --inject-secrets tls,key.log test-capture.pcapng test-capture-with-keys.pcapng
 ```
 
-Zur Vereinfachung habe ich ein kleines Hilfsprogramm mit einer grafischen Oberfläche geschrieben, auf das die Dateien per Drag&Drop
-gezogen werden können, und das auf Tastendruck editcap aufruft. Das Programm ist hier verfügbar:
+To simplify this process, I have written a small helper program with a graphical interface onto which files can be
+dragged and dropped, and which calls editcap at the press of a button. The program is available here:
 
 https://github.com/thomas-v2/PcapKeyInjector
 
-Damit Wireshark das S7comm-Plus Protokoll dekodieren kann, ist die entsprechende dll in das Wireshark Installationsverzeichnis abzulegen.
-Näheres dazu, und Download der dll bei Sourceforge unter:
+In order for Wireshark to decode the S7comm-Plus protocol, the corresponding DLL must be placed in the Wireshark
+installation directory. More details and the DLL download are available at SourceForge:
 
 https://sourceforge.net/projects/s7commwireshark/
 
-## PlcTag-Klasse: Umsetzung der SPS Datentypen in PlcTags
+## PlcTag Class: Mapping PLC Datatypes to PlcTags
 
-Bei einigen Datentypen ist es notwendig, zur Verarbeitung der Antwort der SPS den Typ vorab zu kennen, um ihn in ein
-sinnvollen Datentyp in .Net zu konvertieren. Dazu wird die PlcTag Klasse bereitgestellt.
+For some datatypes, it is necessary to know the type in advance in order to process the PLC response
+and convert it into a meaningful .NET datatype. The PlcTag class is provided for this purpose.
 
-In der Tabelle sind alle in der SPS zur Zeit (TIA V18) möglichen Datentypen aufgeführt, mit dem Datentyp in dem sie
-auf dem Netzwerk im S7comm-Plus-Protokoll übertragen werden, sowie welchen .Net Datentyp in den PlcTag-Klassen daraus
-resultiert.
+The table lists all datatypes currently available in the PLC (as of TIA V18), along with the datatype
+in which they are transmitted on the network in the S7comm-Plus protocol, and the resulting .NET datatype
+in the PlcTag classes.
 
-| Supported | PLC Datentyp              | PLC Kategorie     | PLC Info          | Netzwerk Datentyp             | .Net Datentyp PlcTag          | Sonstiges                                         |
-| :-------: | --------------------------| ----------------- | ----------------- | ----------------------------- | ----------------------------- | ------------------------------------------------- |
-| &check;   | AOM_IDENT                 | Hardwaredatentypen|                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
-| &check;   | Any                       | Zeiger            | Parameter         | ValueUSIntArray[10]           | byte[10]                      |                                                   |
-| &check;   | Array[n..m]               |                   |                   |                               |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | Block_FB                  | Parametertypen    | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | Block_FC                  | Parametertypen    | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | Bool                      | Binärzahlen       |                   | ValueBool                     | bool                          |                                                   |
-| &check;   | Byte                      | Bitfolgen         |                   | ValueByte                     | byte                          |                                                   |
-| &check;   | CONN_ANY                  | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | CONN_OUC                  | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | CONN_PRG                  | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | CONN_R_ID                 | Hardwaredatentypen|                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
-| &check;   | CREF                      | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | Char                      | Zeichenfolgen     |                   | ValueUSInt                    | char                          | Encoding Voreinstellung ISO-8859-1 für non-ASCII  |
-| &check;   | Counter                   | Parametertypen    | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | Date                      | Datum und Uhrzeit |                   | ValueUInt                     | DateTime                      | TODO: Nur Datum gültig!                           |
-| &check;   | Date_And_Time             | Datum und Uhrzeit |                   | ValueUSIntArray[8]            | DateTime                      |                                                   |
-| &check;   | DB_ANY                    | Hardwaredatentypen|                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | DB_DYN                    | Hardwaredatentypen|                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | DB_WWW                    | Hardwaredatentypen|                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | DInt                      | Ganzzahlen        |                   | ValueDInt                     | int                           |                                                   |
-| &check;   | DTL                       | Datum und Uhrzeit |                   | ValueStruct / packed          | DateTime + uint (for ns)      | Nanosekunden extern, da kein .Net Typ mit ns. Experimental!                                     |
-| &check;   | DWord                     | Bitfolgen         |                   | ValueDWord                    | uint                          |                                                   |
-| &check;   | EVENT_ANY                 | Hardwaredatentypen|                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
-| &check;   | EVENT_ATT                 | Hardwaredatentypen|                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
-| &check;   | EVENT_HWINT               | Hardwaredatentypen|                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
-| &check;   | ErrorStruct               |                   |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | HW_ANY                    | Hardwaredatentypen|                   | ValueWord                     |                               |                                                   |
-| &check;   | HW_DEVICE                 | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_DPMASTER               | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_DPSLAVE                | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_HSC                    | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_IEPORT                 | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_INTERFACE              | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_IO                     | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_IOSYSTEM               | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_MODULE                 | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_PTO                    | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_PWM                    | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | HW_SUBMODULE              | Hardwaredatentypen|                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
-| &check;   | IEC_COUNTER               | Systemdatentypen  |                   | ValueStruct / packed          |                               | 33554462, Zugriff auf Einzelelemente direkt möglich |
-| &check;   | IEC_DCOUNTER              | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | IEC_LCOUNTER              | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | IEC_LTIMER                | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | IEC_SCOUNTER              | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | IEC_TIMER                 | Systemdatentypen  |                   | ValueStruct / packed          |                               | 33554463, Zugriff auf Einzelelemente direkt möglich |
-| &check;   | IEC_UCOUNTER              | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | IEC_UDCOUNTER             | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | IEC_ULCOUNTER             | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | IEC_USCOUNTER             | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | Int                       | Ganzzahlen        |                   | ValueInt                      | short                         |                                                   |
-| &check;   | LDT                       | Datum und Uhrzeit |                   | ValueTimestamp                | ulong                         |                                                   |
-| &check;   | LInt                      | Ganzzahlen        |                   | ValueLInt                     | long                          |                                                   |
-| &check;   | LReal                     | Gleitpunktzahlen  |                   | ValueLReal                    | double                        |                                                   |
-| &check;   | LTime                     | Zeiten            |                   | ValueTimespan                 | long                          | Anzahl ns                                         |
-| &check;   | LTime_Of_Day (LTOD)       | Datum und Uhrzeit |                   | ValueULInt                    | ulong                         | Anzahl ns seit 00:00:00 Uhr                       |
-| &check;   | LWord                     | Bitfolgen         |                   | ValueLWord                    | ulong                         |                                                   |
-| &check;   | NREF                      | Systemdatentypen  |                   | ValueStruct / packed          |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | OB_ANY                    | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_ATT                    | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_CYCLIC                 | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_DELAY                  | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_DIAG                   | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_HWINT                  | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_PCYCLE                 | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_STARTUP                | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_TIMEERROR              | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | OB_TOD                    | Hardwaredatentypen|                   | ValueInt                      | PlcTagInt -> short            |                                                   |
-| &check;   | PIP                       | Hardwaredatentypen|                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | Pointer                   | Zeiger            | Parameter         | ValueUSIntArray[6]            | byte[6]                       |                                                   |
-| &check;   | PORT                      | Hardwaredatentypen|                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | RTM                       | Hardwaredatentypen|                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | Real                      | Gleitpunktzahlen  |                   | ValueReal                     | float                         |                                                   |
-| &check;   | Remote                    | Zeiger            | Parameter         | ValueUSIntArray[10]           | PlcTagAny -> byte[10]         | Identisch zu Any-Pointer                          |
-| &check;   | S5Time                    | Zeiten            |                   | ValueWord                     | ushort, ushort                | TODO: TimeBase, TimeValue. Vereinheitlichen?      |
-| &check;   | SInt                      | Ganzzahlen        |                   | ValueSInt                     | sbyte                         |                                                   |
-| &check;   | String                    | Zeichenfolgen     |                   | ValueUSIntArray[stringlen + 2]| string                        | Encoding Voreinstellung ISO-8859-1 für non-ASCII  |
-| &check;   | Struct                    |                   |                   |                               |                               | Zugriff auf Einzelelemente direkt möglich         |
-| &check;   | Time                      | Zeiten            |                   | ValueDInt                     | int                           | Anzahl ms mit Vorzeichen                          |
-| &check;   | Time_Of_Day (TOD)         | Datum und Uhrzeit |                   | ValueUDInt                    | uint                          | Anzahl ms seit 00:00:00 Uhr                       |
-| &check;   | Timer                     | Parametertypen    | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
-| &check;   | UDInt                     | Ganzzahlen        |                   | ValueUDInt                    | uint                          |                                                   |
-| &check;   | UInt                      | Ganzzahlen        |                   | ValueUInt                     | ushort                        |                                                   |
-| &check;   | ULInt                     | Ganzzahlen        |                   | ValueULInt                    | ulong                         |                                                   |
-| &check;   | USInt                     | Ganzzahlen        |                   | ValueUSInt                    | byte                          |                                                   |
-| &cross;   | Variant                   | Zeiger            | Parameter         |                               |                               | Erhält keine Adresse                              |
-| &check;   | WChar                     | Zeichenfolgen     |                   | ValueUInt                     | char                          |                                                   |
-| &check;   | WString                   | Zeichenfolgen     |                   | ValueUIntArray[stringlen + 2] | string                        |                                                   |
-| &check;   | Word                      | Bitfolgen         |                   | ValueWord                     | ushort                        |                                                   |
+| Supported | PLC Datatype              | PLC Category        | PLC Info          | Network Datatype              | .NET Datatype PlcTag          | Notes                                             |
+| :-------: | --------------------------| ------------------- | ----------------- | ----------------------------- | ----------------------------- | ------------------------------------------------- |
+| &#x2713;  | AOM_IDENT                 | Hardware datatypes  |                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
+| &#x2713;  | Any                       | Pointers            | Parameter         | ValueUSIntArray[10]           | byte[10]                      |                                                   |
+| &#x2713;  | Array[n..m]               |                     |                   |                               |                               | Access to individual elements directly possible   |
+| &#x2713;  | Block_FB                  | Parameter types     | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | Block_FC                  | Parameter types     | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | Bool                      | Binary numbers      |                   | ValueBool                     | bool                          |                                                   |
+| &#x2713;  | Byte                      | Bit sequences       |                   | ValueByte                     | byte                          |                                                   |
+| &#x2713;  | CONN_ANY                  | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | CONN_OUC                  | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | CONN_PRG                  | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | CONN_R_ID                 | Hardware datatypes  |                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
+| &#x2713;  | CREF                      | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | Char                      | Character strings   |                   | ValueUSInt                    | char                          | Default encoding ISO-8859-1 for non-ASCII         |
+| &#x2713;  | Counter                   | Parameter types     | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | Date                      | Date and time       |                   | ValueUInt                     | DateTime                      | TODO: Only date is valid!                         |
+| &#x2713;  | Date_And_Time             | Date and time       |                   | ValueUSIntArray[8]            | DateTime                      |                                                   |
+| &#x2713;  | DB_ANY                    | Hardware datatypes  |                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | DB_DYN                    | Hardware datatypes  |                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | DB_WWW                    | Hardware datatypes  |                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | DInt                      | Integers            |                   | ValueDInt                     | int                           |                                                   |
+| &#x2713;  | DTL                       | Date and time       |                   | ValueStruct / packed          | DateTime + uint (for ns)      | Nanoseconds external, as no .NET type with ns. Experimental! |
+| &#x2713;  | DWord                     | Bit sequences       |                   | ValueDWord                    | uint                          |                                                   |
+| &#x2713;  | EVENT_ANY                 | Hardware datatypes  |                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
+| &#x2713;  | EVENT_ATT                 | Hardware datatypes  |                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
+| &#x2713;  | EVENT_HWINT               | Hardware datatypes  |                   | ValueDWord                    | PlcTagDWord -> uint           |                                                   |
+| &#x2713;  | ErrorStruct               |                     |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | HW_ANY                    | Hardware datatypes  |                   | ValueWord                     |                               |                                                   |
+| &#x2713;  | HW_DEVICE                 | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_DPMASTER               | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_DPSLAVE                | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_HSC                    | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_IEPORT                 | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_INTERFACE              | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_IO                     | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_IOSYSTEM               | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_MODULE                 | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_PTO                    | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_PWM                    | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | HW_SUBMODULE              | Hardware datatypes  |                   | ValueWord                     | PlcTagWord -> ushort          |                                                   |
+| &#x2713;  | IEC_COUNTER               | System datatypes    |                   | ValueStruct / packed          |                               | 33554462, access to individual elements directly possible |
+| &#x2713;  | IEC_DCOUNTER              | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | IEC_LCOUNTER              | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | IEC_LTIMER                | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | IEC_SCOUNTER              | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | IEC_TIMER                 | System datatypes    |                   | ValueStruct / packed          |                               | 33554463, access to individual elements directly possible |
+| &#x2713;  | IEC_UCOUNTER              | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | IEC_UDCOUNTER             | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | IEC_ULCOUNTER             | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | IEC_USCOUNTER             | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | Int                       | Integers            |                   | ValueInt                      | short                         |                                                   |
+| &#x2713;  | LDT                       | Date and time       |                   | ValueTimestamp                | ulong                         |                                                   |
+| &#x2713;  | LInt                      | Integers            |                   | ValueLInt                     | long                          |                                                   |
+| &#x2713;  | LReal                     | Floating-point      |                   | ValueLReal                    | double                        |                                                   |
+| &#x2713;  | LTime                     | Times               |                   | ValueTimespan                 | long                          | Count of ns                                       |
+| &#x2713;  | LTime_Of_Day (LTOD)       | Date and time       |                   | ValueULInt                    | ulong                         | Count of ns since 00:00:00                        |
+| &#x2713;  | LWord                     | Bit sequences       |                   | ValueLWord                    | ulong                         |                                                   |
+| &#x2713;  | NREF                      | System datatypes    |                   | ValueStruct / packed          |                               | Access to individual elements directly possible   |
+| &#x2713;  | OB_ANY                    | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_ATT                    | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_CYCLIC                 | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_DELAY                  | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_DIAG                   | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_HWINT                  | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_PCYCLE                 | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_STARTUP                | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_TIMEERROR              | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | OB_TOD                    | Hardware datatypes  |                   | ValueInt                      | PlcTagInt -> short            |                                                   |
+| &#x2713;  | PIP                       | Hardware datatypes  |                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | Pointer                   | Pointers            | Parameter         | ValueUSIntArray[6]            | byte[6]                       |                                                   |
+| &#x2713;  | PORT                      | Hardware datatypes  |                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | RTM                       | Hardware datatypes  |                   | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | Real                      | Floating-point      |                   | ValueReal                     | float                         |                                                   |
+| &#x2713;  | Remote                    | Pointers            | Parameter         | ValueUSIntArray[10]           | PlcTagAny -> byte[10]         | Identical to Any pointer                          |
+| &#x2713;  | S5Time                    | Times               |                   | ValueWord                     | ushort, ushort                | TODO: TimeBase, TimeValue. Unify?                 |
+| &#x2713;  | SInt                      | Integers            |                   | ValueSInt                     | sbyte                         |                                                   |
+| &#x2713;  | String                    | Character strings   |                   | ValueUSIntArray[stringlen + 2]| string                        | Default encoding ISO-8859-1 for non-ASCII         |
+| &#x2713;  | Struct                    |                     |                   |                               |                               | Access to individual elements directly possible   |
+| &#x2713;  | Time                      | Times               |                   | ValueDInt                     | int                           | Count of ms (signed)                              |
+| &#x2713;  | Time_Of_Day (TOD)         | Date and time       |                   | ValueUDInt                    | uint                          | Count of ms since 00:00:00                        |
+| &#x2713;  | Timer                     | Parameter types     | Parameter         | ValueUInt                     | PlcTagUInt -> ushort          |                                                   |
+| &#x2713;  | UDInt                     | Integers            |                   | ValueUDInt                    | uint                          |                                                   |
+| &#x2713;  | UInt                      | Integers            |                   | ValueUInt                     | ushort                        |                                                   |
+| &#x2713;  | ULInt                     | Integers            |                   | ValueULInt                    | ulong                         |                                                   |
+| &#x2713;  | USInt                     | Integers            |                   | ValueUSInt                    | byte                          |                                                   |
+| &#x2717;  | Variant                   | Pointers            | Parameter         |                               |                               | Does not receive an address                       |
+| &#x2713;  | WChar                     | Character strings   |                   | ValueUInt                     | char                          |                                                   |
+| &#x2713;  | WString                   | Character strings   |                   | ValueUIntArray[stringlen + 2] | string                        |                                                   |
+| &#x2713;  | Word                      | Bit sequences       |                   | ValueWord                     | ushort                        |                                                   |
 
-## Lizenz
+## License
 
-Soweit nicht anders vermerkt, gilt für alle Quellcodes die GNU Lesser General Public License,
-Version 3 oder später.
+Unless otherwise noted, all source code is licensed under the GNU Lesser General Public License,
+version 3 or later.
 
 ## Authors
 
