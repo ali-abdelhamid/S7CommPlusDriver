@@ -79,6 +79,7 @@ class S7CommPlusConnection:
     """
 
     def __init__(self) -> None:
+        """Initialize a disconnected S7CommPlusConnection."""
         self._client = S7Client()
         self._session_id: int = 0
         self._session_id2: int = 0
@@ -103,27 +104,37 @@ class S7CommPlusConnection:
 
     @property
     def session_id(self) -> int:
+        """Primary session ID assigned by the PLC (``int``)."""
         return self._session_id
 
     @property
     def session_id2(self) -> int:
+        """Secondary session ID (``int``)."""
         return self._session_id2
 
     @property
     def last_error(self) -> int:
+        """Most recent error code (``int``)."""
         return self._last_error
 
     @property
     def client(self) -> S7Client:
+        """Underlying :class:`S7Client` transport."""
         return self._client
 
     @property
     def comm_resources(self) -> CommResources:
+        """PLC resource limits (:class:`CommResources`)."""
         return self._comm_resources
 
     # -- Sequence / Integrity counters ---------------------------------------
 
     def _next_sequence_number(self) -> int:
+        """Increment and return the next sequence number (wraps at 0xFFFF).
+
+        Returns:
+            Next sequence number (``int``).
+        """
         if self._sequence_number >= 0xFFFF:
             self._sequence_number = 1
         else:
@@ -131,6 +142,16 @@ class S7CommPlusConnection:
         return self._sequence_number
 
     def _next_integrity_id(self, function_code: int) -> int:
+        """Increment and return the next integrity ID for *function_code*.
+
+        Uses a separate counter for set-type operations.
+
+        Args:
+            function_code: S7CommPlus function code.
+
+        Returns:
+            Next integrity ID (``int``).
+        """
         if function_code in _SET_FUNCTION_CODES:
             if self._integrity_id_set >= 0xFFFFFFFF:
                 self._integrity_id_set = 0
@@ -150,7 +171,13 @@ class S7CommPlusConnection:
         """Serialize and send a request object through the S7CommPlus stack.
 
         Sets session_id, sequence_number, and integrity_id on the request
-        before serializing.  Returns 0 on success.
+        before serializing.
+
+        Args:
+            request: A message request object (e.g. :class:`CreateObjectRequest`).
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         # Session ID
         if self._session_id == 0:
@@ -176,7 +203,15 @@ class S7CommPlusConnection:
         )
 
     def _send_pdu_data(self, data: bytes, proto_version: int) -> int:
-        """Frame data as S7CommPlus PDU(s) with header/trailer and send."""
+        """Frame data as S7CommPlus PDU(s) with header/trailer and send.
+
+        Args:
+            data: Serialized payload bytes.
+            proto_version: Protocol version for the PDU header.
+
+        Returns:
+            Error code (``int``): 0 on success.
+        """
         self._last_error = 0
         max_size = _NEGOTIATED_ISO_PDU_SIZE - _PDU_OVERHEAD
         source_pos = 0
@@ -216,6 +251,10 @@ class S7CommPlusConnection:
 
         Handles S7CommPlus PDU fragmentation and pushes complete PDUs
         to the receive queue.
+
+        Args:
+            pdu: Raw PDU bytes from COTP/TLS.
+            length: Total byte count of the PDU.
         """
         pos = 0
 
@@ -282,8 +321,12 @@ class S7CommPlusConnection:
     def wait_for_response(self, timeout: float | None = None) -> bytes | None:
         """Block until a complete S7CommPlus PDU is available.
 
-        Returns the raw PDU bytes (starting with protocol_version byte),
-        or None on timeout.
+        Args:
+            timeout: Maximum wait time in seconds (``None`` = use default).
+
+        Returns:
+            Raw PDU bytes starting with protocol_version byte, or ``None``
+            on timeout.
         """
         if timeout is None:
             timeout = self._read_timeout
@@ -307,7 +350,15 @@ class S7CommPlusConnection:
     # -- Integrity check -----------------------------------------------------
 
     def _check_response_integrity(self, request: Any, response: Any) -> int:
-        """Validate response sequence number and integrity ID."""
+        """Validate response sequence number and integrity ID.
+
+        Args:
+            request: The sent request object.
+            response: The received response object.
+
+        Returns:
+            Error code (``int``): 0 on success.
+        """
         if response is None:
             logger.error("Response is None")
             return ERR_ISO_INVALID_PDU
@@ -349,7 +400,15 @@ class S7CommPlusConnection:
         6. Read system limits (CommResources)
         7. Legitimation (auth)
 
-        Returns 0 on success or an error code.
+        Args:
+            address: IP address of the PLC.
+            password: PLC password (empty = no auth).
+            username: Username for new-style auth (empty = legacy).
+            timeout_ms: Read timeout in milliseconds.
+            keylog_file: Optional TLS key log path.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         if timeout_ms > 0:
             self._read_timeout = timeout_ms / 1000.0
@@ -471,7 +530,14 @@ class S7CommPlusConnection:
         self._client.disconnect()
 
     def _delete_object(self, object_id: int) -> int:
-        """Delete an object on the PLC."""
+        """Delete an object on the PLC.
+
+        Args:
+            object_id: ID of the object to delete.
+
+        Returns:
+            Error code (``int``): 0 on success.
+        """
         del_req = DeleteObjectRequest(ProtocolVersion.V2)
         del_req.delete_object_id = object_id
         res = self.send_request(del_req)
@@ -506,9 +572,12 @@ class S7CommPlusConnection:
     ) -> tuple[list[PValue | None], list[int], int]:
         """Read multiple variables, respecting CommResources chunk limits.
 
-        Returns ``(values, errors, result_code)`` where values[i] is the
-        PValue (or None on error) and errors[i] is 0 on success or an
-        error code.
+        Args:
+            address_list: List of :class:`ItemAddress` to read.
+
+        Returns:
+            Tuple of ``(values, errors, result_code)`` where values[i] is
+            the PValue (or ``None`` on error) and errors[i] is 0 on success.
         """
         count = len(address_list)
         values: list[PValue | None] = [None] * count
@@ -562,7 +631,12 @@ class S7CommPlusConnection:
     ) -> tuple[list[int], int]:
         """Write multiple variables, respecting CommResources chunk limits.
 
-        Returns ``(errors, result_code)`` where errors[i] is 0 on success.
+        Args:
+            address_list: List of :class:`ItemAddress` to write.
+            value_list: Corresponding list of :class:`PValue` to write.
+
+        Returns:
+            Tuple of ``(errors, result_code)`` where errors[i] is 0 on success.
         """
         count = len(address_list)
         errors: list[int] = [0] * count
@@ -603,7 +677,14 @@ class S7CommPlusConnection:
         return errors, self._last_error
 
     def set_plc_operating_state(self, state: int) -> int:
-        """Set the CPU operating state (RUN/STOP)."""
+        """Set the CPU operating state (RUN/STOP).
+
+        Args:
+            state: Target operating state value.
+
+        Returns:
+            Error code (``int``): 0 on success.
+        """
         req = SetVariableRequest(ProtocolVersion.V2)
         req.in_object_id = Ids.NATIVE_OBJECTS_THE_CPU_EXEC_UNIT_RID
         req.address = Ids.CPU_EXEC_UNIT_OPERATING_STATE_REQ

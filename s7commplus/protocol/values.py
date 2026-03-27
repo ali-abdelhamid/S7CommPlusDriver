@@ -17,7 +17,6 @@ Flags byte bits:
 
 from __future__ import annotations
 
-from io import BytesIO
 from typing import Any
 
 from s7commplus.protocol import s7p
@@ -41,8 +40,17 @@ _REGISTRY: dict[tuple[int, str], type["PValue"]] = {}
 
 
 def _register(datatype: int, kind: str = "scalar"):
-    """Decorator to register a PValue subclass."""
+    """Decorator to register a PValue subclass in the type registry.
+
+    Args:
+        datatype: S7CommPlus datatype ID (from :class:`Datatype` enum).
+        kind: Registry slot — ``"scalar"``, ``"array"``, or ``"sparse"``.
+
+    Returns:
+        Class decorator that registers and returns *cls* unchanged.
+    """
     def decorator(cls):
+        """Register *cls* in the global PValue registry and return it."""
         _REGISTRY[(datatype, kind)] = cls
         return cls
     return decorator
@@ -59,25 +67,50 @@ class PValue:
     flags: int = 0
 
     def __init__(self, value: Any = None, flags: int = 0) -> None:
+        """Initialize a PValue.
+
+        Args:
+            value: The Python value to wrap.
+            flags: Wire-level flags byte (array/sparse indicators).
+        """
         self.value = value
         self.flags = flags
 
     @property
     def is_array(self) -> bool:
+        """Whether this value is a regular or address array."""
         return (self.flags & (FLAGS_ARRAY | FLAGS_ADDRESSARRAY)) != 0
 
     @property
     def is_sparse_array(self) -> bool:
+        """Whether this value is a sparse (keyed) array."""
         return (self.flags & FLAGS_SPARSEARRAY) != 0
 
     # -- Serialization -------------------------------------------------------
 
     def serialize(self, buf: bytearray) -> int:
-        """Encode this value into *buf*.  Returns bytes written."""
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+
+        Raises:
+            NotImplementedError: Always — subclasses must override.
+        """
         raise NotImplementedError
 
     def _write_header(self, buf: bytearray) -> int:
-        """Write the common [flags][datatype] header."""
+        """Write the common ``[flags][datatype]`` header.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written (always 2).
+        """
         ret = s7p.encode_byte(buf, self.flags)
         ret += s7p.encode_byte(buf, self.datatype)
         return ret
@@ -86,12 +119,16 @@ class PValue:
 
     @staticmethod
     def deserialize(data: bytes, offset: int, disable_vlq: bool = False) -> tuple["PValue", int]:
-        """Read a PValue from *data* at *offset*.
+        """Read a PValue from *data* at *offset* using the type registry.
 
-        Returns ``(value, bytes_consumed)``.
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            disable_vlq: If ``True``, use fixed-width decoding instead of
+                VLQ (for SystemEvent compatibility).
 
-        :param disable_vlq: If ``True``, use fixed-width decoding instead of
-            VLQ (for SystemEvent compatibility).
+        Returns:
+            Tuple of ``(PValue instance, bytes_consumed)``.
         """
         start = offset
         flags, n = s7p.decode_byte(data, offset); offset += n
@@ -118,7 +155,20 @@ class PValue:
     @classmethod
     def _deserialize(cls, data: bytes, offset: int, flags: int,
                      disable_vlq: bool) -> tuple["PValue", int]:
-        """Subclass hook for type-specific deserialization."""
+        """Subclass hook for type-specific deserialization.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from (after flags/datatype header).
+            flags: Wire-level flags byte already read by :meth:`deserialize`.
+            disable_vlq: If ``True``, use fixed-width decoding.
+
+        Returns:
+            Tuple of ``(PValue instance, bytes_consumed)``.
+
+        Raises:
+            NotImplementedError: Always — subclasses must override.
+        """
         raise NotImplementedError
 
 
@@ -128,72 +178,177 @@ class PValue:
 
 @_register(Datatype.NULL)
 class ValueNull(PValue):
+    """Null value — no payload."""
+
     datatype = Datatype.NULL
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this Null value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         return self._write_header(buf)
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize a Null value (no payload).
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (ValueNull, bytes_consumed).
+        """
         return cls(None, flags), 0
 
 
 @_register(Datatype.BOOL)
 class ValueBool(PValue):
+    """Bool wire-level value (1-bit boolean)."""
+
     datatype = Datatype.BOOL
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_byte(buf, 1 if self.value else 0)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_byte(data, offset)
         return cls(bool(v), flags), n
 
 
 @_register(Datatype.USINT)
 class ValueUSInt(PValue):
+    """USInt wire-level value (unsigned 8-bit integer)."""
+
     datatype = Datatype.USINT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_byte(buf, self.value & 0xFF)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_byte(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.UINT)
 class ValueUInt(PValue):
+    """UInt wire-level value (unsigned 16-bit integer)."""
+
     datatype = Datatype.UINT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint16(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_uint16(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.UDINT)
 class ValueUDInt(PValue):
+    """UDInt wire-level value (unsigned 32-bit integer)."""
+
     datatype = Datatype.UDINT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint32_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_uint32(data, offset)
         else:
@@ -203,15 +358,36 @@ class ValueUDInt(PValue):
 
 @_register(Datatype.ULINT)
 class ValueULInt(PValue):
+    """ULInt wire-level value (unsigned 64-bit integer)."""
+
     datatype = Datatype.ULINT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint64_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_uint64(data, offset)
         else:
@@ -221,15 +397,36 @@ class ValueULInt(PValue):
 
 @_register(Datatype.SINT)
 class ValueSInt(PValue):
+    """SInt wire-level value (signed 8-bit integer)."""
+
     datatype = Datatype.SINT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_byte(buf, self.value & 0xFF)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_byte(data, offset)
         if v > 127:
             v -= 256
@@ -238,30 +435,72 @@ class ValueSInt(PValue):
 
 @_register(Datatype.INT)
 class ValueInt(PValue):
+    """Int wire-level value (signed 16-bit integer)."""
+
     datatype = Datatype.INT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_int16(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_int16(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.DINT)
 class ValueDInt(PValue):
+    """DInt wire-level value (signed 32-bit integer)."""
+
     datatype = Datatype.DINT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_int32_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_int32(data, offset)
         else:
@@ -271,15 +510,36 @@ class ValueDInt(PValue):
 
 @_register(Datatype.LINT)
 class ValueLInt(PValue):
+    """LInt wire-level value (signed 64-bit integer)."""
+
     datatype = Datatype.LINT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_int64_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_int64(data, offset)
         else:
@@ -291,45 +551,108 @@ class ValueLInt(PValue):
 
 @_register(Datatype.BYTE)
 class ValueByte(PValue):
+    """Byte wire-level value (unsigned 8-bit)."""
+
     datatype = Datatype.BYTE
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_byte(buf, self.value & 0xFF)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_byte(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.WORD)
 class ValueWord(PValue):
+    """Word wire-level value (unsigned 16-bit)."""
+
     datatype = Datatype.WORD
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint16(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_uint16(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.DWORD)
 class ValueDWord(PValue):
+    """DWord wire-level value (unsigned 32-bit)."""
+
     datatype = Datatype.DWORD
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint32_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_uint32(data, offset)
         else:
@@ -339,15 +662,36 @@ class ValueDWord(PValue):
 
 @_register(Datatype.LWORD)
 class ValueLWord(PValue):
+    """LWord wire-level value (unsigned 64-bit)."""
+
     datatype = Datatype.LWORD
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint64_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_uint64(data, offset)
         else:
@@ -357,60 +701,144 @@ class ValueLWord(PValue):
 
 @_register(Datatype.REAL)
 class ValueReal(PValue):
+    """Real wire-level value (32-bit IEEE 754 float)."""
+
     datatype = Datatype.REAL
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_float(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_float(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.LREAL)
 class ValueLReal(PValue):
+    """LReal wire-level value (64-bit IEEE 754 float)."""
+
     datatype = Datatype.LREAL
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_double(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_double(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.TIMESTAMP)
 class ValueTimestamp(PValue):
+    """Timestamp wire-level value (unsigned 64-bit nanoseconds since epoch)."""
+
     datatype = Datatype.TIMESTAMP
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint64(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_uint64(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.TIMESPAN)
 class ValueTimespan(PValue):
+    """Timespan wire-level value (signed 64-bit nanoseconds duration)."""
+
     datatype = Datatype.TIMESPAN
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_int64_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_int64(data, offset)
         else:
@@ -420,30 +848,72 @@ class ValueTimespan(PValue):
 
 @_register(Datatype.RID)
 class ValueRID(PValue):
+    """RID wire-level value (32-bit relation identifier)."""
+
     datatype = Datatype.RID
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint32(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         v, n = s7p.decode_uint32(data, offset)
         return cls(v, flags), n
 
 
 @_register(Datatype.AID)
 class ValueAID(PValue):
+    """AID wire-level value (32-bit attribute identifier)."""
+
     datatype = Datatype.AID
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint32_vlq(buf, self.value)
         return ret
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         if disable_vlq:
             v, n = s7p.decode_uint32(data, offset)
         else:
@@ -461,19 +931,36 @@ class ValueBlob(PValue):
     datatype = Datatype.BLOB
 
     def __init__(self, value=None, flags=0):
+        """Initialize a Blob value.
+
+        Args:
+            value: Tuple of ``(blob_root_id, blob_data, has_blob_type,
+                blob_type)`` or ``None`` for an empty blob.
+            flags: Wire-level flags byte.
+        """
         if value is None:
             value = (0, b"", False, 0)
         super().__init__(value, flags)
 
     @property
     def blob_root_id(self) -> int:
+        """The blob root identifier (``int``)."""
         return self.value[0]
 
     @property
     def blob_data(self) -> bytes:
+        """The raw blob payload (``bytes``)."""
         return self.value[1]
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         root_id, data, _, _ = self.value
         ret += s7p.encode_uint32_vlq(buf, root_id)
@@ -483,6 +970,17 @@ class ValueBlob(PValue):
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         start = offset
         if disable_vlq:
             root_id, n = s7p.decode_uint32(data, offset)
@@ -509,9 +1007,19 @@ class ValueBlob(PValue):
 
 @_register(Datatype.WSTRING)
 class ValueWString(PValue):
+    """WString wire-level value (UTF-16LE encoded string)."""
+
     datatype = Datatype.WSTRING
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         encoded = self.value.encode("utf-8") if self.value else b""
         ret += s7p.encode_uint32_vlq(buf, len(encoded))
@@ -520,6 +1028,17 @@ class ValueWString(PValue):
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         start = offset
         if disable_vlq:
             strlen, n = s7p.decode_uint32(data, offset)
@@ -533,13 +1052,34 @@ class ValueWString(PValue):
 
 @_register(Datatype.VARIANT)
 class ValueVariant(PValue):
+    """Variant type — header only, no payload."""
+
     datatype = Datatype.VARIANT
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this Variant header into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written (always 2).
+        """
         return self._write_header(buf)
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize a Variant value (no payload).
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (ValueVariant, bytes_consumed).
+        """
         return cls(None, flags), 0
 
 
@@ -560,23 +1100,59 @@ class ValueStruct(PValue):
     datatype = Datatype.STRUCT
 
     def __init__(self, value=0, flags=0):
+        """Initialize a Struct value.
+
+        Args:
+            value: Struct type ID (``int``).  Zero for anonymous structs.
+            flags: Wire-level flags byte.
+        """
         super().__init__(value, flags)
         self.elements: dict[int, PValue] = {}
         self.packed_interface_timestamp: int = 0
         self.packed_transport_flags: int = 0x02  # AlwaysSet
 
     def add_element(self, element_id: int, element: PValue) -> None:
+        """Insert or replace an element in this struct.
+
+        Args:
+            element_id: Numeric element key (uint32).
+            element: PValue to store.
+        """
         self.elements[element_id] = element
 
     def get_element(self, element_id: int) -> PValue | None:
+        """Look up an element by ID.
+
+        Args:
+            element_id: Numeric element key.
+
+        Returns:
+            The stored :class:`PValue`, or ``None`` if absent.
+        """
         return self.elements.get(element_id)
 
     @staticmethod
     def _is_packed(struct_id: int) -> bool:
+        """Whether *struct_id* uses packed (system-type) encoding.
+
+        Args:
+            struct_id: Struct type ID to test.
+
+        Returns:
+            ``True`` if the ID falls in a packed range.
+        """
         return ((0x90000000 < struct_id < 0x9FFFFFFF) or
                 (0x02000000 < struct_id < 0x02FFFFFF))
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this value into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = self._write_header(buf)
         ret += s7p.encode_uint32(buf, self.value)
 
@@ -598,6 +1174,17 @@ class ValueStruct(PValue):
 
     @classmethod
     def _deserialize(cls, data, offset, flags, disable_vlq):
+        """Deserialize this value type from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+            flags: Wire-level flags byte.
+            disable_vlq: If True, use fixed-width decoding.
+
+        Returns:
+            Tuple of (PValue instance, bytes_consumed).
+        """
         start = offset
         struct_id, n = s7p.decode_uint32(data, offset); offset += n
 
@@ -655,13 +1242,31 @@ class ValueStruct(PValue):
 # ===========================================================================
 
 def _make_array_type(scalar_cls: type[PValue], dt: int):
-    """Generate an array type for any scalar PValue class."""
+    """Generate an array type for any scalar PValue class.
+
+    Args:
+        scalar_cls: The scalar PValue subclass whose payload format to reuse.
+        dt: Datatype ID to register under (same as the scalar's).
+
+    Returns:
+        Newly created array PValue subclass, registered in ``_REGISTRY``.
+    """
 
     @_register(dt, "array")
     class _ArrayType(PValue):
+        """Dynamically-generated array PValue type."""
+
         datatype = dt
 
         def serialize(self, buf: bytearray) -> int:
+            """Encode this array into *buf*.
+
+            Args:
+                buf: Target buffer to append to.
+
+            Returns:
+                Number of bytes written.
+            """
             ret = self._write_header(buf)
             arr = self.value or []
             ret += s7p.encode_uint32_vlq(buf, len(arr))
@@ -677,6 +1282,17 @@ def _make_array_type(scalar_cls: type[PValue], dt: int):
 
         @classmethod
         def _deserialize(cls, data, offset, flags, disable_vlq):
+            """Deserialize an array of scalars from wire data.
+
+            Args:
+                data: Source byte buffer.
+                offset: Position to read from.
+                flags: Wire-level flags byte.
+                disable_vlq: If True, use fixed-width decoding.
+
+            Returns:
+                Tuple of (array PValue instance, bytes_consumed).
+            """
             start = offset
             if disable_vlq:
                 count, n = s7p.decode_uint32(data, offset)
@@ -725,13 +1341,31 @@ ValueWStringArray = _make_array_type(ValueWString, Datatype.WSTRING)
 # ===========================================================================
 
 def _make_sparse_type(scalar_cls: type[PValue], dt: int):
-    """Generate a sparse array type (dict[uint32, value])."""
+    """Generate a sparse array type (``dict[uint32, value]``).
+
+    Args:
+        scalar_cls: The scalar PValue subclass whose payload format to reuse.
+        dt: Datatype ID to register under (same as the scalar's).
+
+    Returns:
+        Newly created sparse-array PValue subclass, registered in ``_REGISTRY``.
+    """
 
     @_register(dt, "sparse")
     class _SparseType(PValue):
+        """Dynamically-generated sparse-array PValue type."""
+
         datatype = dt
 
         def serialize(self, buf: bytearray) -> int:
+            """Encode this sparse array into *buf*.
+
+            Args:
+                buf: Target buffer to append to.
+
+            Returns:
+                Number of bytes written.
+            """
             ret = self._write_header(buf)
             d = self.value or {}
             for k, v in d.items():
@@ -746,6 +1380,17 @@ def _make_sparse_type(scalar_cls: type[PValue], dt: int):
 
         @classmethod
         def _deserialize(cls, data, offset, flags, disable_vlq):
+            """Deserialize a sparse array from wire data.
+
+            Args:
+                data: Source byte buffer.
+                offset: Position to read from.
+                flags: Wire-level flags byte.
+                disable_vlq: If True, use fixed-width decoding.
+
+            Returns:
+                Tuple of (sparse-array PValue instance, bytes_consumed).
+            """
             start = offset
             d: dict[int, Any] = {}
             if disable_vlq:

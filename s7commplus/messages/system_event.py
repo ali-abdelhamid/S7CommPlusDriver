@@ -18,6 +18,12 @@ class SystemEvent:
     """
 
     def __init__(self, protocol_version: int = 0) -> None:
+
+        """Initialize a SystemEvent with default values.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.reserved1: int = 0
         self.confirmed_bytes: int = 0
@@ -29,6 +35,18 @@ class SystemEvent:
         self.message: str = ""
 
     def deserialize(self, data: bytes, offset: int) -> int:
+
+        """Deserialize this system event from wire data.
+
+        Values use fixed-width encoding (no VLQ).
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Number of bytes consumed.
+        """
         start = offset
         self.reserved1, n = s7p.decode_uint32(data, offset); offset += n
         self.confirmed_bytes, n = s7p.decode_uint32(data, offset); offset += n
@@ -64,6 +82,16 @@ class SystemEvent:
 
     @classmethod
     def from_pdu(cls, data: bytes, offset: int = 0) -> SystemEvent | None:
+
+        """Construct a SystemEvent from a complete PDU.
+
+        Args:
+            data: Raw PDU bytes.
+            offset: Starting offset.
+
+        Returns:
+            Populated :class:`SystemEvent`, or ``None`` if version mismatch.
+        """
         proto_ver, n = s7p.decode_byte(data, offset); offset += n
         if proto_ver != ProtocolVersion.SYSTEM_EVENT:
             return None

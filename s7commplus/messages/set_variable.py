@@ -13,10 +13,18 @@ from s7commplus.messages.base import (
 
 
 class SetVariableRequest:
+    """Request to write a single variable (used for legitimation)."""
+
     transport_flags = 0x34
     function_code = FunctionCode.SET_VARIABLE
 
     def __init__(self, protocol_version: int) -> None:
+
+        """Initialize a SetVariableRequest.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.session_id: int = 0
@@ -27,6 +35,15 @@ class SetVariableRequest:
         self.value: PValue | None = None
 
     def serialize(self, buf: bytearray) -> int:
+
+        """Serialize this request into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = encode_request_header(
             buf, FunctionCode.SET_VARIABLE,
             self.sequence_number, self.session_id, self.transport_flags,
@@ -44,7 +61,15 @@ class SetVariableRequest:
 
 
 class SetVariableResponse:
+    """Response carrying the write result and return value."""
+
     def __init__(self, protocol_version: int = 0) -> None:
+
+        """Initialize a SetVariableResponse.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.transport_flags: int = 0
@@ -53,6 +78,16 @@ class SetVariableResponse:
         self.integrity_id: int = 0
 
     def deserialize(self, data: bytes, offset: int) -> int:
+
+        """Deserialize this response from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Number of bytes consumed.
+        """
         start = offset
         self.sequence_number, self.transport_flags, offset = \
             decode_response_common(data, offset)
@@ -62,6 +97,16 @@ class SetVariableResponse:
 
     @classmethod
     def from_pdu(cls, data: bytes, offset: int = 0) -> SetVariableResponse | None:
+
+        """Construct a response from a complete PDU.
+
+        Args:
+            data: Raw PDU bytes.
+            offset: Starting offset.
+
+        Returns:
+            Populated response, or ``None`` on parse failure.
+        """
         proto_ver, offset = decode_response_pdu_header(
             data, offset, Opcode.RESPONSE, FunctionCode.SET_VARIABLE,
         )

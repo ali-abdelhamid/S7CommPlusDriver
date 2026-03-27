@@ -30,6 +30,8 @@ from s7commplus.protocol.values import (
 # ---------------------------------------------------------------------------
 
 class Quality:
+    """OPC DA quality-code constants for tag read results."""
+
     MASK = 0xC0
     STATUS_MASK = 0xFC
     LIMIT_MASK = 0x03
@@ -55,14 +57,38 @@ class Quality:
 # ---------------------------------------------------------------------------
 
 def _bcd_byte_to_int(value: int) -> int:
+    """Convert a BCD-encoded byte to integer.
+
+    Args:
+        value: BCD byte (0x00–0x99).
+
+    Returns:
+        Decoded integer (0–99).
+    """
     return 10 * (value // 16) + (value % 16)
 
 
 def _int_to_bcd_byte(value: int) -> int:
+    """Convert an integer (0–99) to BCD-encoded byte.
+
+    Args:
+        value: Integer to encode.
+
+    Returns:
+        BCD byte (``int``).
+    """
     return (value // 10 * 16) + (value % 10)
 
 
 def _bcd_ushort_to_ushort(value: int) -> int:
+    """Convert a BCD-encoded 16-bit value to integer.
+
+    Args:
+        value: BCD uint16.
+
+    Returns:
+        Decoded integer (0–9999).
+    """
     return ((value & 0x000F)
             + ((value & 0x00F0) >> 4) * 10
             + ((value & 0x0F00) >> 8) * 100
@@ -70,6 +96,14 @@ def _bcd_ushort_to_ushort(value: int) -> int:
 
 
 def _ushort_to_bcd_ushort(value: int) -> int:
+    """Convert an integer (0–9999) to BCD-encoded 16-bit value.
+
+    Args:
+        value: Integer to encode.
+
+    Returns:
+        BCD uint16 (``int``).
+    """
     b = [0] * 4
     for i in range(4):
         b[i] = value % 10
@@ -93,6 +127,14 @@ class PlcTag:
         self, name: str, address: ItemAddress, softdatatype: int,
         *, write_cls: type | None = None,
     ) -> None:
+        """Initialize a PlcTag.
+
+        Args:
+            name: Human-readable tag name.
+            address: Item address for PLC access.
+            softdatatype: Softdatatype constant.
+            write_cls: PValue subclass used to wrap values for writing.
+        """
         self.name = name
         self.address = address
         self.softdatatype = softdatatype
@@ -103,6 +145,12 @@ class PlcTag:
         self._write_cls = write_cls
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Update this tag from a read response.
+
+        Args:
+            pvalue: Decoded PValue from the PLC.
+            error: Error code (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -111,14 +159,32 @@ class PlcTag:
         self.quality = Quality.GOOD
 
     def process_write_result(self, error: int) -> None:
+        """Record the result of a write operation.
+
+        Args:
+            error: Error code (0 = success).
+        """
         self.last_write_error = error
 
     def get_write_value(self) -> PValue:
+        """Wrap the current value in the appropriate PValue for writing.
+
+        Returns:
+            PValue instance ready for serialization.
+
+        Raises:
+            TypeError: If no write class is configured.
+        """
         if self._write_cls is None:
             raise TypeError(f"No write class configured for softdatatype {self.softdatatype}")
         return self._write_cls(self.value)
 
     def __repr__(self) -> str:
+        """Return a debug-friendly string representation.
+
+        Returns:
+            String with name, softdatatype, and quality.
+        """
         return f"PlcTag({self.name!r}, sdt={self.softdatatype}, q=0x{self.quality:02X})"
 
 
@@ -130,11 +196,18 @@ class PlcTagChar(PlcTag):
     """CHAR — single byte character, ISO-8859-1 encoded."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize a CHAR tag."""
         super().__init__(name, address, softdatatype)
         self.encoding = "iso-8859-1"
         self.value = "\x00"
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -143,6 +216,11 @@ class PlcTagChar(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         return ValueUSInt(self.value.encode(self.encoding)[0])
 
 
@@ -150,10 +228,17 @@ class PlcTagWChar(PlcTag):
     """WCHAR — single 16-bit Unicode character."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize a WCHAR tag."""
         super().__init__(name, address, softdatatype)
         self.value = "\x00"
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -162,6 +247,11 @@ class PlcTagWChar(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         return ValueUInt(ord(self.value))
 
 
@@ -170,12 +260,19 @@ class PlcTagString(PlcTag):
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int,
                  max_length: int = 254) -> None:
+        """Initialize a STRING tag."""
         super().__init__(name, address, softdatatype)
         self.max_length = max_length
         self.encoding = "iso-8859-1"
         self.value = ""
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -186,6 +283,11 @@ class PlcTagString(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         sb = self.value.encode(self.encoding)
         b = [0] * (self.max_length + 2)
         b[0] = self.max_length
@@ -200,11 +302,18 @@ class PlcTagWString(PlcTag):
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int,
                  max_length: int = 254) -> None:
+        """Initialize a WSTRING tag."""
         super().__init__(name, address, softdatatype)
         self.max_length = max_length
         self.value = ""
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -216,6 +325,11 @@ class PlcTagWString(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         b = [0] * (len(self.value) + 2)
         b[0] = self.max_length
         b[1] = len(self.value)
@@ -230,10 +344,17 @@ class PlcTagDate(PlcTag):
     _EPOCH = datetime(1990, 1, 1)
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize a DATE tag."""
         super().__init__(name, address, softdatatype)
         self.value = self._EPOCH
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -242,6 +363,11 @@ class PlcTagDate(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         return ValueUInt((self.value - self._EPOCH).days)
 
 
@@ -249,6 +375,7 @@ class PlcTagTimeOfDay(PlcTag):
     """TIME_OF_DAY — milliseconds since midnight as UDInt."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize a TIME_OF_DAY tag."""
         super().__init__(name, address, softdatatype, write_cls=ValueUDInt)
         self.value = 0
 
@@ -257,6 +384,7 @@ class PlcTagTime(PlcTag):
     """TIME — milliseconds (signed) as DInt."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize a TIME tag."""
         super().__init__(name, address, softdatatype, write_cls=ValueDInt)
         self.value = 0
 
@@ -265,12 +393,19 @@ class PlcTagS5Time(PlcTag):
     """S5TIME — BCD-encoded time value with time base."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize an S5TIME tag."""
         super().__init__(name, address, softdatatype)
         self.time_value: int = 0
         self.time_base: int = 0
         self.value = 0  # raw Word value
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -282,12 +417,18 @@ class PlcTagS5Time(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         v = _ushort_to_bcd_ushort(self.time_value)
         v |= (self.time_base & 0x3) << 12
         return ValueWord(v)
 
     @property
     def milliseconds(self) -> int:
+        """Converted time value in milliseconds (``int``)."""
         multipliers = {0: 10, 1: 100, 2: 1000, 3: 10000}
         return self.time_value * multipliers.get(self.time_base, 0)
 
@@ -296,10 +437,17 @@ class PlcTagDateAndTime(PlcTag):
     """DATE_AND_TIME — 8-byte BCD-encoded datetime."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize a DATE_AND_TIME tag."""
         super().__init__(name, address, softdatatype)
         self.value = datetime(1990, 1, 1)
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -313,6 +461,11 @@ class PlcTagDateAndTime(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         dt = self.value
         year_2d = dt.year - 1900 if dt.year < 2000 else dt.year - 2000
         ts = [year_2d, dt.month, dt.day, dt.hour, dt.minute, dt.second,
@@ -326,6 +479,7 @@ class PlcTagLTime(PlcTag):
     """LTIME — nanoseconds as Timespan (int64)."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize an LTIME tag."""
         super().__init__(name, address, softdatatype, write_cls=ValueTimespan)
         self.value = 0
 
@@ -334,6 +488,7 @@ class PlcTagLTOD(PlcTag):
     """LTOD — nanoseconds since midnight as ULInt."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize an LTOD tag."""
         super().__init__(name, address, softdatatype, write_cls=ValueULInt)
         self.value = 0
 
@@ -342,6 +497,7 @@ class PlcTagLDT(PlcTag):
     """LDT — nanoseconds since epoch as Timestamp (uint64)."""
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize an LDT tag."""
         super().__init__(name, address, softdatatype, write_cls=ValueTimestamp)
         self.value = 0
 
@@ -352,12 +508,19 @@ class PlcTagDTL(PlcTag):
     DTL_TYPE_ID = 0x02000043
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int) -> None:
+        """Initialize a DTL tag."""
         super().__init__(name, address, softdatatype)
         self.value = datetime(1970, 1, 1)
         self.nanosecond: int = 0
         self.interface_timestamp: int = 0x10FF4AD6DFD5774C
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -378,6 +541,11 @@ class PlcTagDTL(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         dt = self.value
         struct_val = ValueStruct(self.DTL_TYPE_ID)
         struct_val.packed_interface_timestamp = self.interface_timestamp
@@ -404,10 +572,17 @@ class PlcTagRawBytes(PlcTag):
 
     def __init__(self, name: str, address: ItemAddress, softdatatype: int,
                  size: int = 0) -> None:
+        """Initialize a raw bytes tag."""
         super().__init__(name, address, softdatatype)
         self.value = [0] * size
 
     def process_read_result(self, pvalue: PValue, error: int) -> None:
+        """Decode the PValue from a read response and update this tag.
+
+        Args:
+            pvalue: Wire-level value returned by the PLC.
+            error: Per-item error code from the read response (0 = success).
+        """
         self.last_read_error = error
         if error != 0:
             self.quality = Quality.BAD
@@ -416,6 +591,11 @@ class PlcTagRawBytes(PlcTag):
         self.quality = Quality.GOOD
 
     def get_write_value(self) -> PValue:
+        """Build the PValue to send in a write request.
+
+        Returns:
+            PValue with this tag\'s current value encoded for the wire.
+        """
         return ValueUSIntArray(self.value)
 
 
@@ -494,7 +674,14 @@ def tag_factory(
 ) -> PlcTag | None:
     """Create a PlcTag instance for the given softdatatype.
 
-    Returns ``None`` for unknown datatypes (matching C# behaviour).
+    Args:
+        name: Human-readable tag name.
+        address: Item address for PLC access.
+        softdatatype: Softdatatype constant.
+        is_1dim: If ``True``, use the array write class where available.
+
+    Returns:
+        A :class:`PlcTag` instance, or ``None`` for unknown datatypes.
     """
     # Special types with custom encoding
     if softdatatype == Softdatatype.CHAR:
@@ -548,6 +735,13 @@ def read_tags(connection, tags: list[PlcTag]) -> int:
 
     Calls ``connection.read_values()`` with the tags' addresses, then
     dispatches the results to each tag's ``process_read_result``.
+
+    Args:
+        connection: Active :class:`S7CommPlusConnection`.
+        tags: List of :class:`PlcTag` to read.
+
+    Returns:
+        Error code (``int``): 0 on success.
     """
     addresses = [tag.address for tag in tags]
     values, errors, result = connection.read_values(addresses)
@@ -563,6 +757,13 @@ def write_tags(connection, tags: list[PlcTag]) -> int:
 
     Calls ``connection.write_values()`` with the tags' addresses and values,
     then dispatches the results to each tag's ``process_write_result``.
+
+    Args:
+        connection: Active :class:`S7CommPlusConnection`.
+        tags: List of :class:`PlcTag` to write.
+
+    Returns:
+        Error code (``int``): 0 on success.
     """
     addresses = [tag.address for tag in tags]
     pvalues = [tag.get_write_value() for tag in tags]

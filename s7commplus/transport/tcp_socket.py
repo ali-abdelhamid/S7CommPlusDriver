@@ -25,6 +25,7 @@ class MsgSocket:
     """
 
     def __init__(self) -> None:
+        """Initialize a disconnected MsgSocket with default timeouts."""
         self._sock: socket.socket | None = None
         self.last_error: int = 0
         self._read_timeout: float = 2.0   # seconds
@@ -34,6 +35,7 @@ class MsgSocket:
     # -- lifecycle -----------------------------------------------------------
 
     def close(self) -> None:
+        """Shut down and close the underlying socket."""
         if self._sock is not None:
             try:
                 self._sock.shutdown(socket.SHUT_RDWR)
@@ -43,12 +45,22 @@ class MsgSocket:
             self._sock = None
 
     def _create_socket(self) -> None:
+        """Create a TCP stream socket with Nagle disabled."""
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
     # -- connect -------------------------------------------------------------
 
     def connect(self, host: str, port: int) -> int:
+        """Connect to *host*:*port* with the configured timeout.
+
+        Args:
+            host: IP address or hostname.
+            port: TCP port number.
+
+        Returns:
+            Error code (``int``): 0 on success.
+        """
         self.last_error = 0
         if self.connected:
             return 0
@@ -68,7 +80,15 @@ class MsgSocket:
     # -- data transfer -------------------------------------------------------
 
     def _wait_for_data(self, size: int, timeout: float) -> int:
-        """Poll until *size* bytes are available or *timeout* expires."""
+        """Poll until *size* bytes are available or *timeout* expires.
+
+        Args:
+            size: Minimum bytes required.
+            timeout: Maximum wait time in seconds.
+
+        Returns:
+            Error code (``int``): 0 when enough data is available.
+        """
         self.last_error = 0
         if self._sock is None:
             self.last_error = ERR_TCP_NOT_CONNECTED
@@ -95,7 +115,11 @@ class MsgSocket:
         return self.last_error
 
     def _bytes_available(self) -> int:
-        """Return the number of bytes waiting in the receive buffer."""
+        """Return the number of bytes waiting in the receive buffer.
+
+        Returns:
+            Byte count (``int``); 0 if none or on error.
+        """
         if self._sock is None:
             return 0
         # Use non-blocking peek to determine available bytes.
@@ -115,7 +139,14 @@ class MsgSocket:
         """Receive exactly *size* bytes into *buffer* at *start*.
 
         Blocks until all bytes arrive or the read timeout expires.
-        Returns an error code (0 on success).
+
+        Args:
+            buffer: Destination bytearray.
+            start: Offset within *buffer* to write to.
+            size: Number of bytes to receive.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         self.last_error = self._wait_for_data(size, self._read_timeout)
         if self.last_error != 0:
@@ -138,7 +169,15 @@ class MsgSocket:
         return self.last_error
 
     def send(self, data: bytes | bytearray, size: int) -> int:
-        """Send *size* bytes from *data*."""
+        """Send *size* bytes from *data*.
+
+        Args:
+            data: Source byte buffer.
+            size: Number of bytes to send.
+
+        Returns:
+            Error code (``int``): 0 on success.
+        """
         self.last_error = 0
         if self._sock is None:
             self.last_error = ERR_TCP_NOT_CONNECTED
@@ -156,6 +195,7 @@ class MsgSocket:
 
     @property
     def connected(self) -> bool:
+        """Whether the socket is connected and alive (``bool``)."""
         if self._sock is None:
             return False
         # Quick liveness check — peek for 0 bytes
@@ -180,24 +220,42 @@ class MsgSocket:
 
     @property
     def read_timeout(self) -> float:
+        """Read timeout in seconds (``float``)."""
         return self._read_timeout
 
     @read_timeout.setter
     def read_timeout(self, value: float) -> None:
+        """Set read timeout in seconds.
+
+        Args:
+            value: New value (float).
+        """
         self._read_timeout = value
 
     @property
     def write_timeout(self) -> float:
+        """Write timeout in seconds (``float``)."""
         return self._write_timeout
 
     @write_timeout.setter
     def write_timeout(self, value: float) -> None:
+        """Set write timeout in seconds.
+
+        Args:
+            value: New value (float).
+        """
         self._write_timeout = value
 
     @property
     def connect_timeout(self) -> float:
+        """Connect timeout in seconds (``float``)."""
         return self._connect_timeout
 
     @connect_timeout.setter
     def connect_timeout(self, value: float) -> None:
+        """Set connect timeout in seconds.
+
+        Args:
+            value: New value (float).
+        """
         self._connect_timeout = value

@@ -40,11 +40,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 class LegitimationType:
+    """PLC authentication method identifiers."""
     LEGACY = 1
     NEW = 2
 
 
 class AccessLevel:
+    """PLC access-level constants (full, read, HMI, none)."""
     FULL_ACCESS = 1
     READ_ACCESS = 2
     HMI_ACCESS = 3
@@ -60,15 +62,40 @@ _RE_VERSION = re.compile(r"^.*;.*[17]\s?([52]\d\d).+;[VS](\d\.\d)$")
 # ---------------------------------------------------------------------------
 
 def _sha256(data: bytes) -> bytes:
+    """Compute SHA-256 digest.
+
+    Args:
+        data: Input bytes.
+
+    Returns:
+        32-byte digest (``bytes``).
+    """
     return hashlib.sha256(data).digest()
 
 
 def _sha1(data: bytes) -> bytes:
+    """Compute SHA-1 digest.
+
+    Args:
+        data: Input bytes.
+
+    Returns:
+        20-byte digest (``bytes``).
+    """
     return hashlib.sha1(data).digest()
 
 
 def _encrypt_aes_cbc(plaintext: bytes, key: bytes, iv: bytes) -> bytes:
-    """AES-256-CBC with PKCS7 padding."""
+    """AES-256-CBC encrypt with PKCS7 padding.
+
+    Args:
+        plaintext: Data to encrypt.
+        key: 32-byte AES key.
+        iv: 16-byte initialization vector.
+
+    Returns:
+        Ciphertext (``bytes``).
+    """
     padder = PKCS7(128).padder()
     padded = padder.update(plaintext) + padder.finalize()
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
@@ -85,6 +112,13 @@ def _build_legitimation_payload(password: str, username: str = "") -> bytes:
 
     If *username* is provided, uses new-style login (type=2).
     Otherwise, uses legacy login (type=1) with SHA1-hashed password.
+
+    Args:
+        password: PLC password.
+        username: Username for new-style auth (empty = legacy).
+
+    Returns:
+        Serialized payload (``bytes``).
     """
     payload = ValueStruct(Ids.LID_LEGITIMATION_PAYLOAD_STRUCT)
 
@@ -136,7 +170,14 @@ def legitimate(
     Parses the server session to determine firmware version, checks the
     current protection level, and authenticates if needed.
 
-    Returns 0 on success or an error code.
+    Args:
+        conn: Active S7CommPlus connection.
+        server_session: Server session struct from CreateObject response.
+        password: PLC password (empty = skip auth).
+        username: Username for new-style auth (empty = legacy).
+
+    Returns:
+        Error code (``int``): 0 on success.
     """
     from s7commplus.messages import (
         GetVarSubstreamedRequest,
@@ -226,7 +267,16 @@ def _legitimate_new(
     password: str,
     username: str = "",
 ) -> int:
-    """New-style authentication using AES-256-CBC encrypted payload."""
+    """New-style authentication using AES-256-CBC encrypted payload.
+
+    Args:
+        conn: Active S7CommPlus connection.
+        password: PLC password.
+        username: Username (empty = password-only).
+
+    Returns:
+        Error code (``int``): 0 on success.
+    """
     from s7commplus.messages import (
         GetVarSubstreamedRequest,
         GetVarSubstreamedResponse,
@@ -307,7 +357,15 @@ def _legitimate_new(
 # ---------------------------------------------------------------------------
 
 def _legitimate_legacy(conn: S7CommPlusConnection, password: str) -> int:
-    """Legacy authentication using SHA1(password) XOR challenge."""
+    """Legacy authentication using SHA1(password) XOR challenge.
+
+    Args:
+        conn: Active S7CommPlus connection.
+        password: PLC password.
+
+    Returns:
+        Error code (``int``): 0 on success.
+    """
     from s7commplus.messages import (
         GetVarSubstreamedRequest,
         GetVarSubstreamedResponse,

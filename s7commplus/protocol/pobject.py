@@ -25,6 +25,13 @@ class PObject:
     """
 
     def __init__(self, rid: int = 0, cls_id: int = 0, aid: int = 0) -> None:
+        """Initialize a PObject.
+
+        Args:
+            rid: Relation ID.
+            cls_id: Class ID.
+            aid: Attribute ID.
+        """
         self.relation_id: int = rid
         self.class_id: int = cls_id
         self.class_flags: int = 0
@@ -36,28 +43,83 @@ class PObject:
         self.varname_list: PVarnameList | None = None
 
     def add_attribute(self, attr_id: int, value: Any) -> None:
+        """Store an attribute value.
+
+        Args:
+            attr_id: Attribute ID (uint32).
+            value: PValue to store.
+        """
         self.attributes[attr_id] = value
 
     def get_attribute(self, attr_id: int) -> Any:
+        """Look up an attribute by ID.
+
+        Args:
+            attr_id: Attribute ID.
+
+        Returns:
+            The stored PValue, or ``None`` if absent.
+        """
         return self.attributes.get(attr_id)
 
     def add_relation(self, rel_id: int, value: int) -> None:
+        """Store a relation entry.
+
+        Args:
+            rel_id: Relation ID (uint32).
+            value: Relation value (uint32).
+        """
         self.relations[rel_id] = value
 
     def add_object(self, obj: PObject) -> None:
+        """Add a child object, keyed by ``(class_id, relation_id)``.
+
+        Args:
+            obj: Child PObject to store.
+        """
         key = (obj.class_id, obj.relation_id)
         self.objects[key] = obj
 
     def get_object(self, class_id: int, rel_id: int) -> PObject | None:
+        """Look up a child object by class and relation ID.
+
+        Args:
+            class_id: Class ID to match.
+            rel_id: Relation ID to match.
+
+        Returns:
+            The matching child :class:`PObject`, or ``None``.
+        """
         return self.objects.get((class_id, rel_id))
 
     def get_objects_by_class(self, class_id: int) -> list[PObject]:
+        """Return all child objects with a given class ID.
+
+        Args:
+            class_id: Class ID to filter on.
+
+        Returns:
+            List of matching :class:`PObject` instances.
+        """
         return [o for (cid, _), o in self.objects.items() if cid == class_id]
 
     def get_all_objects(self) -> list[PObject]:
+        """Return all child objects.
+
+        Returns:
+            List of all child :class:`PObject` instances.
+        """
         return list(self.objects.values())
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this object into *buf* (header + attributes + children + relations).
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = 0
         ret += s7p.encode_byte(buf, ElementID.START_OF_OBJECT)
         ret += s7p.encode_uint32(buf, self.relation_id)
@@ -97,6 +159,7 @@ class OffsetInfo:
     FB_SFB = 15
 
     def __init__(self) -> None:
+        """Initialize an empty OffsetInfo with default values."""
         self.offset_type: int = 0
         self.optimized_address: int = 0
         self.nonoptimized_address: int = 0
@@ -108,12 +171,27 @@ class OffsetInfo:
         self.extra: dict[str, int] = {}
 
     def has_relation(self) -> bool:
+        """Whether this offset type references a related type-info object.
+
+        Returns:
+            ``True`` for struct, FB-array, FB-SFB, and struct-array types.
+        """
         return self.offset_type in (0, 5, 6, 7, 12, 13, 14, 15)
 
     def is_1dim(self) -> bool:
+        """Whether this offset type describes a one-dimensional array.
+
+        Returns:
+            ``True`` for 1-dim array and struct-1-dim types.
+        """
         return self.offset_type in (3, 6, 10, 13)
 
     def is_mdim(self) -> bool:
+        """Whether this offset type describes a multi-dimensional array.
+
+        Returns:
+            ``True`` for multi-dim array and struct-multi-dim types.
+        """
         return self.offset_type in (4, 7, 11, 14)
 
 
@@ -136,6 +214,7 @@ class VartypeElement:
     BITINFO_OPT_BITOFFSET = 0x07
 
     def __init__(self) -> None:
+        """Initialize an empty VartypeElement with default values."""
         self.lid: int = 0
         self.symbol_crc: int = 0
         self.softdatatype: int = 0
@@ -144,23 +223,57 @@ class VartypeElement:
         self.offset_info: OffsetInfo | None = None
 
     def get_attribute_bitoffset(self) -> int:
+        """Extract the 3-bit attribute bitoffset from attribute_flags.
+
+        Returns:
+            Bit offset value (0–7).
+        """
         return self.attribute_flags & self.ATTR_BITOFFSET
 
     def get_attribute_section(self) -> int:
+        """Extract the section field from attribute_flags.
+
+        Returns:
+            Section value (0–7).
+        """
         return (self.attribute_flags & self.ATTR_SECTION) >> 4
 
     def get_bitoffsetinfo_flag_classic(self) -> bool:
+        """Whether the classic-mode bit is set in bitoffsetinfo_flags.
+
+        Returns:
+            ``True`` if the classic bit is set.
+        """
         return (self.bitoffsetinfo_flags & self.BITINFO_CLASSIC) != 0
 
     def get_bitoffsetinfo_nonoptimized_bitoffset(self) -> int:
+        """Extract the non-optimized bitoffset from bitoffsetinfo_flags.
+
+        Returns:
+            Non-optimized bit offset value (0–7).
+        """
         return (self.bitoffsetinfo_flags & self.BITINFO_NONOPT_BITOFFSET) >> 4
 
     def get_bitoffsetinfo_optimized_bitoffset(self) -> int:
+        """Extract the optimized bitoffset from bitoffsetinfo_flags.
+
+        Returns:
+            Optimized bit offset value (0–7).
+        """
         return self.bitoffsetinfo_flags & self.BITINFO_OPT_BITOFFSET
 
 
 def _deserialize_offset_info(data: bytes, offset: int, oi_type: int) -> tuple[OffsetInfo, int]:
-    """Deserialize an OffsetInfo based on its type."""
+    """Deserialize an OffsetInfo based on its type.
+
+    Args:
+        data: Source byte buffer.
+        offset: Position to read from.
+        oi_type: Offset info type constant (0–15).
+
+    Returns:
+        Tuple of ``(OffsetInfo, bytes_consumed)``.
+    """
     start = offset
     oi = OffsetInfo()
     oi.offset_type = oi_type
@@ -293,7 +406,15 @@ def _deserialize_offset_info(data: bytes, offset: int, oi_type: int) -> tuple[Of
 
 
 def _deserialize_vartype_element(data: bytes, offset: int) -> tuple[VartypeElement, int]:
-    """Deserialize one VartypeListElement."""
+    """Deserialize one VartypeListElement from wire data.
+
+    Args:
+        data: Source byte buffer.
+        offset: Position to read from.
+
+    Returns:
+        Tuple of ``(VartypeElement, bytes_consumed)``.
+    """
     start = offset
     elem = VartypeElement()
     elem.lid, n = s7p.decode_uint32_le(data, offset); offset += n
@@ -312,11 +433,21 @@ class PVartypeList:
     """Tag description list (variable type information)."""
 
     def __init__(self) -> None:
+        """Initialize an empty PVartypeList."""
         self.elements: list[VartypeElement] = []
         self.first_id: int = 0
 
     @classmethod
     def deserialize(cls, data: bytes, offset: int) -> tuple[PVartypeList, int]:
+        """Deserialize a vartype list from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Tuple of ``(PVartypeList, bytes_consumed)``.
+        """
         start = offset
         vt = cls()
         block_len, n = s7p.decode_uint16(data, offset); offset += n
@@ -341,10 +472,20 @@ class PVarnameList:
     """Variable name list."""
 
     def __init__(self) -> None:
+        """Initialize an empty PVarnameList."""
         self.names: list[str] = []
 
     @classmethod
     def deserialize(cls, data: bytes, offset: int) -> tuple[PVarnameList, int]:
+        """Deserialize a variable name list from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Tuple of ``(PVarnameList, bytes_consumed)``.
+        """
         start = offset
         vn = cls()
         block_len, n = s7p.decode_uint16(data, offset); offset += n
@@ -369,6 +510,12 @@ class ItemAddress:
     """Address descriptor for variable access."""
 
     def __init__(self, area: int = 0, sub_area: int = Ids.DB_VALUE_ACTUAL) -> None:
+        """Initialize an ItemAddress.
+
+        Args:
+            area: Access area ID (e.g. DB number encoded as ``0x8A0E0000 + n``).
+            sub_area: Access sub-area ID (default: ``DB_VALUE_ACTUAL``).
+        """
         self.symbol_crc: int = 0
         self.access_area: int = area
         self.access_sub_area: int = sub_area
@@ -376,7 +523,14 @@ class ItemAddress:
 
     @classmethod
     def from_access_string(cls, access_string: str) -> ItemAddress:
-        """Parse hex-dot access string like ``8A0E0001.A``."""
+        """Parse hex-dot access string like ``8A0E0001.A``.
+
+        Args:
+            access_string: Dot-separated hex string.
+
+        Returns:
+            Populated :class:`ItemAddress`.
+        """
         parts = access_string.split(".")
         ids = [int(p, 16) for p in parts]
         addr = cls()
@@ -396,12 +550,30 @@ class ItemAddress:
         return addr
 
     def get_number_of_fields(self) -> int:
+        """Return the total number of VLQ fields this address occupies.
+
+        Returns:
+            Field count (``int``): always ``4 + len(self.lid)``.
+        """
         return 4 + len(self.lid)
 
     def set_datablock(self, number: int) -> None:
+        """Set access_area to a data-block number.
+
+        Args:
+            number: DB number (0–65535).
+        """
         self.access_area = (number & 0xFFFF) + 0x8A0E0000
 
     def serialize(self, buf: bytearray) -> int:
+        """Encode this address into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = 0
         ret += s7p.encode_uint32_vlq(buf, self.symbol_crc)
         ret += s7p.encode_uint32_vlq(buf, self.access_area)
@@ -423,6 +595,15 @@ def decode_object(data: bytes, offset: int, as_list: bool = False) -> tuple[PObj
     """Decode a PObject from the wire, including nested children.
 
     Ported from S7p.DecodeObject in S7p.cs.
+
+    Args:
+        data: Source byte buffer.
+        offset: Position to read from.
+        as_list: If ``True``, subsequent StartOfObject tags are added as
+            child objects rather than triggering recursion.
+
+    Returns:
+        Tuple of ``(PObject or None, bytes_consumed)``.
     """
     from s7commplus.protocol.values import PValue  # late import
 
@@ -493,6 +674,14 @@ def _decode_object_inner(data: bytes, offset: int, obj: PObject) -> tuple[PObjec
     This handles the recursive case where we've already parsed the header
     (StartOfObject + RID/CLS/FLAGS/AID) and now need to parse contents
     until TerminatingObject.
+
+    Args:
+        data: Source byte buffer.
+        offset: Position to read from (after the header).
+        obj: PObject to populate with attributes, children, and lists.
+
+    Returns:
+        Tuple of ``(obj, bytes_consumed)``.
     """
     from s7commplus.protocol.values import PValue
 
@@ -540,7 +729,15 @@ def _decode_object_inner(data: bytes, offset: int, obj: PObject) -> tuple[PObjec
 
 
 def decode_object_list(data: bytes, offset: int) -> tuple[list[PObject], int]:
-    """Decode a list of PObjects (each starts with 0xA1)."""
+    """Decode a list of PObjects (each starts with 0xA1).
+
+    Args:
+        data: Source byte buffer.
+        offset: Position to read from.
+
+    Returns:
+        Tuple of ``(list[PObject], bytes_consumed)``.
+    """
     start = offset
     obj_list: list[PObject] = []
 
@@ -557,7 +754,14 @@ def decode_object_list(data: bytes, offset: int) -> tuple[list[PObject], int]:
 
 
 def encode_object_qualifier(buf: bytearray) -> int:
-    """Encode an ObjectQualifier block (ParentRID=0, CompositionAID=0, KeyQualifier=0)."""
+    """Encode an ObjectQualifier block (ParentRID=0, CompositionAID=0, KeyQualifier=0).
+
+    Args:
+        buf: Target buffer to append to.
+
+    Returns:
+        Number of bytes written.
+    """
     from s7commplus.protocol.values import ValueRID, ValueAID, ValueUDInt
 
     ret = 0

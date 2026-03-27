@@ -13,10 +13,18 @@ from s7commplus.messages.base import (
 
 
 class ExploreRequest:
+    """Request to explore PLC object tree and read variable type information."""
+
     transport_flags = 0x34
     function_code = FunctionCode.EXPLORE
 
     def __init__(self, protocol_version: int) -> None:
+
+        """Initialize an ExploreRequest.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.session_id: int = 0
@@ -30,6 +38,15 @@ class ExploreRequest:
         self.address_list: list[int] = []
 
     def serialize(self, buf: bytearray) -> int:
+
+        """Serialize this request into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = encode_request_header(
             buf, FunctionCode.EXPLORE,
             self.sequence_number, self.session_id, self.transport_flags,
@@ -58,7 +75,15 @@ class ExploreRequest:
 
 
 class ExploreResponse:
+    """Response carrying explored objects, vartype lists, and varname lists."""
+
     def __init__(self, protocol_version: int = 0) -> None:
+
+        """Initialize an ExploreResponse.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.transport_flags: int = 0
@@ -69,6 +94,16 @@ class ExploreResponse:
         self.objects: list[PObject] = []
 
     def deserialize(self, data: bytes, offset: int) -> int:
+
+        """Deserialize this response from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Number of bytes consumed.
+        """
         start = offset
         self.sequence_number, self.transport_flags, offset = \
             decode_response_common(data, offset)
@@ -82,6 +117,17 @@ class ExploreResponse:
     @classmethod
     def from_pdu(cls, data: bytes, offset: int = 0,
                  with_integrity_id: bool = False) -> ExploreResponse | None:
+
+        """Construct a response from a complete PDU.
+
+        Args:
+            data: Raw PDU bytes.
+            offset: Starting offset.
+            with_integrity_id: Whether integrity ID is present.
+
+        Returns:
+            Populated response, or ``None`` on parse failure.
+        """
         proto_ver, offset = decode_response_pdu_header(
             data, offset, Opcode.RESPONSE, FunctionCode.EXPLORE,
         )

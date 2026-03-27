@@ -9,6 +9,8 @@ from enum import IntEnum
 
 
 class NodeType(IntEnum):
+    """Classification of browser tree nodes."""
+
     UNDEFINED = 0
     ROOT = 1
     VAR = 2
@@ -26,6 +28,7 @@ class Node:
     )
 
     def __init__(self) -> None:
+        """Initialize an empty Node with default values."""
         self.node_type: int = NodeType.UNDEFINED
         self.name: str = ""
         self.access_id: int = 0
@@ -47,6 +50,7 @@ class VarInfo:
     )
 
     def __init__(self) -> None:
+        """Initialize an empty VarInfo with default values."""
         self.name: str = ""
         self.access_sequence: str = ""
         self.softdatatype: int = 0
@@ -56,6 +60,11 @@ class VarInfo:
         self.nonopt_bitoffset: int = 0
 
     def __repr__(self) -> str:
+        """Return a debug-friendly string representation.
+
+        Returns:
+            Human-readable string with name, access sequence, and offsets.
+        """
         return (
             f"VarInfo(name={self.name!r}, access={self.access_sequence!r}, "
             f"sdt={self.softdatatype}, opt={self.opt_address}:{self.opt_bitoffset}, "

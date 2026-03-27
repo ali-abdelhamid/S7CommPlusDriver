@@ -62,6 +62,7 @@ class S7Client:
     """
 
     def __init__(self) -> None:
+        """Initialize an S7Client with default parameters (not yet connected)."""
         # Network stack
         self._socket = MsgSocket()
         self._cotp: COTPTransport | None = None
@@ -105,9 +106,13 @@ class S7Client:
     ) -> int:
         """Configure the connection parameters before calling :meth:`connect`.
 
-        :param address: IP address of the PLC.
-        :param local_tsap: 16-bit local TSAP (source).
-        :param remote_tsap: Remote TSAP bytes (default: ``SIMATIC-ROOT-HMI``).
+        Args:
+            address: IP address of the PLC.
+            local_tsap: 16-bit local TSAP (source).
+            remote_tsap: Remote TSAP bytes (default: ``SIMATIC-ROOT-HMI``).
+
+        Returns:
+            Always 0.
         """
         self._ip_address = address
         self._local_tsap_hi = (local_tsap >> 8) & 0xFF
@@ -120,7 +125,8 @@ class S7Client:
     def connect(self) -> int:
         """Open the full TCP → COTP → background-reader stack.
 
-        Returns 0 on success, or an error code.
+        Returns:
+            Error code (``int``): 0 on success.
         """
         self._last_error = 0
         self._time_ms = 0
@@ -159,10 +165,14 @@ class S7Client:
     def ssl_activate(self, keylog_file: str | None = None) -> int:
         """Activate TLS 1.3 over the existing COTP connection.
 
-        Must be called after :meth:`connect` succeeds.  Returns 0 on success.
+        Must be called after :meth:`connect` succeeds.
 
-        :param keylog_file: Optional path for TLS key log (Wireshark-compatible).
-            If not given, falls back to ``SSLKEYLOGFILE`` env var.
+        Args:
+            keylog_file: Optional path for TLS key log (Wireshark-compatible).
+                If not given, falls back to ``SSLKEYLOGFILE`` env var.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         if self._cotp is None:
             return ERR_TCP_NOT_CONNECTED
@@ -185,7 +195,11 @@ class S7Client:
             self._tls = None
 
     def disconnect(self) -> int:
-        """Shut everything down cleanly."""
+        """Shut everything down cleanly.
+
+        Returns:
+            Always 0.
+        """
         self._stop_event.set()
         if self._run_thread is not None:
             self._run_thread.join(timeout=5.0)
@@ -201,7 +215,11 @@ class S7Client:
     def send(self, data: bytes | bytearray) -> int:
         """Send *data* through TLS (if active) or raw COTP.
 
-        Returns 0 on success.
+        Args:
+            data: Payload bytes to send.
+
+        Returns:
+            Error code (``int``): 0 on success.
         """
         if self._ssl_active and self._tls is not None:
             return self._tls.send(data)
@@ -212,7 +230,10 @@ class S7Client:
     def get_oms_exporter_secret(self) -> bytes | None:
         """Derive the 32-byte OMS exporter secret from the TLS session.
 
-        Used for PLC legitimation.  Returns ``None`` if TLS is not active.
+        Used for PLC legitimation.
+
+        Returns:
+            32-byte key (``bytes``), or ``None`` if TLS is not active.
         """
         if self._tls is None:
             return None
@@ -224,6 +245,7 @@ class S7Client:
     # -- Background reader thread --------------------------------------------
 
     def _start_thread(self) -> None:
+        """Launch the background reader daemon thread."""
         self._stop_event.clear()
         self._run_thread = threading.Thread(
             target=self._run_loop,
@@ -261,61 +283,95 @@ class S7Client:
 
     @property
     def connected(self) -> bool:
+        """Whether the underlying TCP socket is connected (``bool``)."""
         return self._socket.connected
 
     @property
     def last_error(self) -> int:
+        """Most recent error code (``int``)."""
         return self._last_error
 
     @property
     def plc_port(self) -> int:
+        """PLC TCP port number (``int``)."""
         return self._plc_port
 
     @plc_port.setter
     def plc_port(self, value: int) -> None:
+        """Set plc tcp port number.
+
+        Args:
+            value: New value (int).
+        """
         self._plc_port = value
 
     @property
     def recv_timeout(self) -> float:
+        """Receive timeout in seconds (``float``)."""
         return self._recv_timeout
 
     @recv_timeout.setter
     def recv_timeout(self, value: float) -> None:
+        """Set receive timeout in seconds.
+
+        Args:
+            value: New value (float).
+        """
         self._recv_timeout = value
 
     @property
     def send_timeout(self) -> float:
+        """Send timeout in seconds (``float``)."""
         return self._send_timeout
 
     @send_timeout.setter
     def send_timeout(self, value: float) -> None:
+        """Set send timeout in seconds.
+
+        Args:
+            value: New value (float).
+        """
         self._send_timeout = value
 
     @property
     def conn_timeout(self) -> float:
+        """Connection timeout in seconds (``float``)."""
         return self._conn_timeout
 
     @conn_timeout.setter
     def conn_timeout(self, value: float) -> None:
+        """Set connection timeout in seconds.
+
+        Args:
+            value: New value (float).
+        """
         self._conn_timeout = value
 
     @property
     def pdu_size_requested(self) -> int:
+        """Requested PDU size, clamped to ``[MIN_PDU_SIZE, MAX_PDU_SIZE]`` (``int``)."""
         return self._pdu_size_requested
 
     @pdu_size_requested.setter
     def pdu_size_requested(self, value: int) -> None:
+        """Set requested pdu size.
+
+        Args:
+            value: New value (int).
+        """
         self._pdu_size_requested = max(MIN_PDU_SIZE, min(value, MAX_PDU_SIZE))
 
     @property
     def pdu_length(self) -> int:
+        """Negotiated PDU length (``int``)."""
         return self._pdu_length
 
     @property
     def execution_time(self) -> int:
-        """Connection time in milliseconds."""
+        """Connection time in milliseconds (``int``)."""
         return self._time_ms
 
     @property
     def ssl_active(self) -> bool:
+        """Whether TLS is currently active (``bool``)."""
         return self._ssl_active

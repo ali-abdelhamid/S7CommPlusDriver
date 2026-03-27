@@ -18,6 +18,12 @@ class Notification:
     """
 
     def __init__(self, protocol_version: int = 0) -> None:
+
+        """Initialize a Notification with default values.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.subscription_object_id: int = 0
         self.unknown2: int = 0
@@ -37,6 +43,16 @@ class Notification:
         self.p2_objects: list[PObject] = []
 
     def deserialize(self, data: bytes, offset: int) -> int:
+
+        """Deserialize this notification from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Number of bytes consumed.
+        """
         start = offset
 
         self.subscription_object_id, n = s7p.decode_uint32(data, offset); offset += n
@@ -98,6 +114,16 @@ class Notification:
 
     @classmethod
     def from_pdu(cls, data: bytes, offset: int = 0) -> Notification | None:
+
+        """Construct a Notification from a complete PDU.
+
+        Args:
+            data: Raw PDU bytes.
+            offset: Starting offset.
+
+        Returns:
+            Populated :class:`Notification`, or ``None`` if opcode mismatch.
+        """
         proto_ver, n = s7p.decode_byte(data, offset); offset += n
         opcode, n = s7p.decode_byte(data, offset); offset += n
         if opcode != Opcode.NOTIFICATION:

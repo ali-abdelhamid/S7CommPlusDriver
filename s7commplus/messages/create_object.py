@@ -13,11 +13,21 @@ from s7commplus.messages.base import (
 
 
 class CreateObjectRequest:
+    """Request to create a server session object on the PLC."""
+
     transport_flags = 0x36
     function_code = FunctionCode.CREATE_OBJECT
 
     def __init__(self, protocol_version: int, seq_num: int,
                  with_integrity_id: bool = False) -> None:
+
+        """Initialize a CreateObjectRequest.
+
+        Args:
+            protocol_version: Wire protocol version.
+            seq_num: Initial sequence number.
+            with_integrity_id: Whether to include integrity ID.
+        """
         self.protocol_version = protocol_version
         self.sequence_number = seq_num
         self.session_id: int = 0
@@ -47,6 +57,15 @@ class CreateObjectRequest:
         ))
 
     def serialize(self, buf: bytearray) -> int:
+
+        """Serialize this request into *buf*.
+
+        Args:
+            buf: Target buffer to append to.
+
+        Returns:
+            Number of bytes written.
+        """
         ret = encode_request_header(
             buf, FunctionCode.CREATE_OBJECT,
             self.sequence_number, self.session_id, self.transport_flags,
@@ -62,7 +81,15 @@ class CreateObjectRequest:
 
 
 class CreateObjectResponse:
+    """Response carrying the created session object and server session data."""
+
     def __init__(self, protocol_version: int = 0) -> None:
+
+        """Initialize a CreateObjectResponse.
+
+        Args:
+            protocol_version: Wire protocol version.
+        """
         self.protocol_version = protocol_version
         self.sequence_number: int = 0
         self.transport_flags: int = 0
@@ -74,6 +101,16 @@ class CreateObjectResponse:
         self.integrity_id: int = 0
 
     def deserialize(self, data: bytes, offset: int) -> int:
+
+        """Deserialize this response from wire data.
+
+        Args:
+            data: Source byte buffer.
+            offset: Position to read from.
+
+        Returns:
+            Number of bytes consumed.
+        """
         start = offset
         self.sequence_number, self.transport_flags, offset = \
             decode_response_common(data, offset)
@@ -89,6 +126,16 @@ class CreateObjectResponse:
 
     @classmethod
     def from_pdu(cls, data: bytes, offset: int = 0) -> CreateObjectResponse | None:
+
+        """Construct a response from a complete PDU.
+
+        Args:
+            data: Raw PDU bytes.
+            offset: Starting offset.
+
+        Returns:
+            Populated response, or ``None`` on parse failure.
+        """
         proto_ver, offset = decode_response_pdu_header(
             data, offset, Opcode.RESPONSE, FunctionCode.CREATE_OBJECT,
         )

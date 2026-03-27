@@ -103,6 +103,12 @@ def _get_size_of_datatype(vte: VartypeElement) -> int:
     """Return byte size for an array element of the given type.
 
     For STRING/WSTRING the size comes from UnspecifiedOffsetinfo1 + 2.
+
+    Args:
+        vte: Vartype element describing the datatype.
+
+    Returns:
+        Element size in bytes (``int``).
     """
     sdt = vte.softdatatype
     if sdt in (Softdatatype.STRING, Softdatatype.WSTRING):
@@ -114,6 +120,14 @@ def _get_size_of_datatype(vte: VartypeElement) -> int:
 
 
 def _is_softdatatype_supported(softdatatype: int) -> bool:
+    """Whether *softdatatype* is supported for browsing.
+
+    Args:
+        softdatatype: Softdatatype constant to check.
+
+    Returns:
+        ``True`` if the type is in the supported set.
+    """
     return softdatatype in _SUPPORTED_SOFTDATATYPES
 
 
@@ -125,20 +139,35 @@ class Browser:
     """Builds a tree of PLC variables and flattens them into VarInfo entries."""
 
     def __init__(self) -> None:
+        """Initialize an empty Browser."""
         self._root_nodes: list[Node] = []
         self._type_objects: list[PObject] = []
         self._var_info_list: list[VarInfo] = []
 
     @property
     def var_info_list(self) -> list[VarInfo]:
+        """Flat list of browsed variable info entries (``list[VarInfo]``)."""
         return self._var_info_list
 
     def set_type_info_objects(self, objs: list[PObject]) -> None:
+        """Set the type-info PObject list used to resolve struct relations.
+
+        Args:
+            objs: List of type-info :class:`PObject` instances.
+        """
         self._type_objects = objs
 
     def add_block_node(
         self, node_type: int, name: str, access_id: int, ti_rel_id: int,
     ) -> None:
+        """Add a root-level block node (DB, I, Q, M, etc.).
+
+        Args:
+            node_type: :class:`NodeType` constant.
+            name: Human-readable block name.
+            access_id: Access ID for the block.
+            ti_rel_id: Relation ID linking to type-info objects.
+        """
         node = Node()
         node.node_type = node_type
         node.name = name
@@ -151,6 +180,7 @@ class Browser:
     # ------------------------------------------------------------------
 
     def build_tree(self) -> None:
+        """Build the variable tree by resolving type-info for each root node."""
         for node in self._root_nodes:
             for obj in self._type_objects:
                 if obj.relation_id == node.relation_id:
@@ -158,6 +188,12 @@ class Browser:
                     break
 
     def _add_sub_nodes(self, node: Node, obj: PObject) -> None:
+        """Populate *node* with child nodes from *obj*'s vartype/varname lists.
+
+        Args:
+            node: Parent node to add children to.
+            obj: PObject containing vartype_list and optionally varname_list.
+        """
         if obj.vartype_list is None:
             return
 
@@ -184,6 +220,13 @@ class Browser:
                 self._resolve_relation(subnode, oi.relation_id)
 
     def _handle_1dim_array(self, subnode: Node, vte: VartypeElement, oi) -> None:
+        """Expand a 1-dimensional array into child nodes.
+
+        Args:
+            subnode: Parent node for the array elements.
+            vte: Vartype element describing the array.
+            oi: OffsetInfo with bounds and counts.
+        """
         count = oi.array_element_count
         lower = oi.array_lower_bounds
 
@@ -220,6 +263,13 @@ class Browser:
                 subnode.children.append(arraynode)
 
     def _handle_mdim_array(self, subnode: Node, vte: VartypeElement, oi) -> None:
+        """Expand a multi-dimensional array into child nodes.
+
+        Args:
+            subnode: Parent node for the array elements.
+            vte: Vartype element describing the array.
+            oi: OffsetInfo with multi-dim bounds and counts.
+        """
         total_count = oi.array_element_count
         lower = oi.array_lower_bounds
         mdim_counts = oi.mdim_element_counts
@@ -286,6 +336,12 @@ class Browser:
             n += 1
 
     def _resolve_relation(self, node: Node, relation_id: int) -> None:
+        """Resolve a struct relation by finding its type-info object.
+
+        Args:
+            node: Node to populate with struct children.
+            relation_id: Relation ID to look up.
+        """
         for obj in self._type_objects:
             if obj.relation_id == relation_id:
                 self._add_sub_nodes(node, obj)
@@ -293,7 +349,14 @@ class Browser:
 
     @staticmethod
     def _get_tcom_size(obj: PObject) -> int:
-        """Get TComSize attribute from a type-info PObject."""
+        """Get TComSize attribute from a type-info PObject.
+
+        Args:
+            obj: Type-info PObject to query.
+
+        Returns:
+            TComSize value (``int``); 0 if not present.
+        """
         attr = obj.get_attribute(Ids.TI_TCOM_SIZE)
         if attr is not None:
             return attr.value
@@ -304,6 +367,7 @@ class Browser:
     # ------------------------------------------------------------------
 
     def build_flat_list(self) -> None:
+        """Flatten the variable tree into :attr:`var_info_list`."""
         self._var_info_list = []
         for node in self._root_nodes:
             if node.children:
@@ -313,6 +377,15 @@ class Browser:
         self, node: Node, names: str, access_ids: str,
         opt_offset: int, nonopt_offset: int,
     ) -> None:
+        """Recursively flatten *node* and its children into VarInfo entries.
+
+        Args:
+            node: Current tree node.
+            names: Accumulated dot-separated name prefix.
+            access_ids: Accumulated hex access-ID path.
+            opt_offset: Accumulated optimized byte offset.
+            nonopt_offset: Accumulated non-optimized byte offset.
+        """
         # Build name/access path prefix based on node type
         if node.node_type == NodeType.ROOT:
             names += node.name
